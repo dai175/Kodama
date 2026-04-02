@@ -30,6 +30,7 @@ struct TreeView: View {
 
                 viewModel.loadOrCreateTree(context: modelContext)
                 bonsaiRenderer.renderTree(from: viewModel.blocks)
+                viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
             }
     }
 }
