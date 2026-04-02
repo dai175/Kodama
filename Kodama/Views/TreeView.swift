@@ -6,28 +6,44 @@
 //
 
 import SceneKit
+import SwiftData
 import SwiftUI
 
 // MARK: - TreeView
 
 struct TreeView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var viewModel = TreeViewModel()
+    @State private var bonsaiScene = BonsaiScene()
+    @State private var renderer: BonsaiRenderer?
+    @State private var hasLoaded = false
+
     var body: some View {
-        SceneViewRepresentable()
+        SceneViewRepresentable(bonsaiScene: bonsaiScene)
             .ignoresSafeArea()
+            .onAppear {
+                guard !hasLoaded else { return }
+                hasLoaded = true
+
+                let bonsaiRenderer = BonsaiRenderer(bonsaiScene: bonsaiScene)
+                renderer = bonsaiRenderer
+
+                viewModel.loadOrCreateTree(context: modelContext)
+                bonsaiRenderer.renderTree(from: viewModel.blocks)
+            }
     }
 }
 
 // MARK: - SceneViewRepresentable
 
 struct SceneViewRepresentable: UIViewRepresentable {
+    let bonsaiScene: BonsaiScene
+
     func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(bonsaiScene: bonsaiScene)
     }
 
     func makeUIView(context: Context) -> SCNView {
-        let bonsaiScene = BonsaiScene()
-        context.coordinator.bonsaiScene = bonsaiScene
-
         let scnView = SCNView()
         scnView.scene = bonsaiScene.scene
         scnView.pointOfView = bonsaiScene.cameraNode
@@ -73,13 +89,17 @@ struct SceneViewRepresentable: UIViewRepresentable {
     // MARK: - Coordinator
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        var bonsaiScene: BonsaiScene?
+        let bonsaiScene: BonsaiScene
         weak var scnView: SCNView?
+
+        init(bonsaiScene: BonsaiScene) {
+            self.bonsaiScene = bonsaiScene
+        }
 
         // MARK: - Gesture Handling
 
         @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-            guard gesture.state == .ended, let bonsaiScene, let scnView else { return }
+            guard gesture.state == .ended, let scnView else { return }
 
             SCNTransaction.begin()
             SCNTransaction.animationDuration = 0.5
@@ -94,8 +114,6 @@ struct SceneViewRepresentable: UIViewRepresentable {
         }
 
         @objc func handleInteraction(_ gesture: UIGestureRecognizer) {
-            guard let bonsaiScene else { return }
-
             switch gesture.state {
             case .began:
                 bonsaiScene.stopAutoRotation()
