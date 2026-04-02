@@ -5,17 +5,50 @@
 
 import Foundation
 
+// MARK: - GrowthResult
+
+struct GrowthResult {
+    let newBlocks: [VoxelBlockData]
+    let seasonalEffects: SeasonalResult
+}
+
 // MARK: - GrowthEngine
 
 enum GrowthEngine {
-    // MARK: - Season Color Palettes
-
-    private static let springLeafColors = ["#7AB648", "#8BC96A", "#5A9E3A", "#A3D977"]
-    private static let springFlowerColors = ["#F2A6C4", "#E88BAD", "#FFB7D5"]
-    private static let summerLeafColors = ["#3A7D22", "#4A8C2A", "#2E6B18", "#5A9E3A"]
-    private static let autumnLeafColors = ["#C8A830", "#D4A017", "#E87C28", "#CC4422", "#B8860B"]
-
     // MARK: - Growth Calculation
+
+    /// Pure function: takes existing state, returns new blocks and seasonal effects.
+    static func calculateGrowthWithSeasons(
+        tree: BonsaiTree,
+        existingBlocks: [VoxelBlockData],
+        since lastEval: Date,
+        currentDate: Date = Date(),
+        pendingInteractions: [Interaction] = [],
+        blockDates: [Date?] = []
+    ) -> GrowthResult {
+        let newBlocks = calculateGrowth(
+            tree: tree,
+            existingBlocks: existingBlocks,
+            since: lastEval,
+            currentDate: currentDate,
+            pendingInteractions: pendingInteractions
+        )
+
+        let allBlocks = existingBlocks + newBlocks
+        let season = Season.current(from: currentDate)
+        let elapsedDays = max(1, Int(currentDate.timeIntervalSince(lastEval) / 86400))
+        var rng = SeededRandom(seed: UInt64(tree.seed) &+ UInt64(currentDate.timeIntervalSince1970))
+
+        let seasonalEffects = SeasonalEngine.applySeasonalEffects(
+            to: allBlocks,
+            season: season,
+            rng: &rng,
+            elapsedDays: elapsedDays,
+            blockDates: blockDates + Array(repeating: currentDate, count: newBlocks.count)
+        )
+
+        return GrowthResult(newBlocks: newBlocks, seasonalEffects: seasonalEffects)
+    }
 
     /// Pure function: takes existing state, returns new blocks to add.
     static func calculateGrowth(
@@ -252,31 +285,20 @@ enum GrowthEngine {
     // MARK: - Color
 
     private static func blockColor(for blockType: BlockType, season: Season, rng: inout SeededRandom) -> String {
-        let palette: [String] = switch blockType {
+        switch blockType {
         case .trunk:
-            TreeBuilder.trunkColors
+            TreeBuilder.trunkColors[Int(rng.next() % UInt64(TreeBuilder.trunkColors.count))]
         case .branch:
-            TreeBuilder.branchColors
+            TreeBuilder.branchColors[Int(rng.next() % UInt64(TreeBuilder.branchColors.count))]
         case .leaf:
-            switch season {
-            case .spring:
-                springLeafColors
-            case .summer:
-                summerLeafColors
-            case .autumn:
-                autumnLeafColors
-            case .winter:
-                TreeBuilder.leafColors
-            }
+            SeasonalEngine.leafColor(for: season, rng: &rng)
         case .flower:
-            springFlowerColors
+            SeasonalEngine.springFlowerColor
         case .moss:
-            ["#4A6741", "#3D5A36"]
+            SeasonalEngine.summerMossColor
         case .snow:
-            ["#E8E8F0", "#D0D0E0"]
+            SeasonalEngine.snowColor
         }
-
-        return palette[Int(rng.next() % UInt64(palette.count))]
     }
 
     // MARK: - Trunk Thickening
