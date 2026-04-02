@@ -45,9 +45,9 @@ nonisolated struct SeededRandom: RandomNumberGenerator {
 enum TreeBuilder {
     // MARK: - Color Palettes
 
-    private static let trunkColors = ["#4A3520", "#3D2E1C", "#553D28"]
-    private static let branchColors = ["#5A4530", "#4D3B28"]
-    private static let leafColors = ["#7AB648", "#5A9E3A", "#68B040"]
+    static let trunkColors = ["#4A3520", "#3D2E1C", "#553D28"]
+    static let branchColors = ["#5A4530", "#4D3B28"]
+    static let leafColors = ["#7AB648", "#5A9E3A", "#68B040"]
 
     // MARK: - Sapling Generation
 
