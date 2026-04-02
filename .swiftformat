@@ -1,0 +1,19 @@
+# SwiftFormat Configuration — Kodama
+
+--swiftversion 6.1
+--indent 4
+--indentcase false
+--maxwidth 120
+--allman false
+--self remove
+--commas inline
+--voidtype void
+--trimwhitespace always
+--importgrouping testable-bottom
+--marktypes always
+--markextensions always
+--redundanttype inferred
+--emptybraces no-space
+--ifdef indent
+--exclude DerivedData,.build,Kodama.xcodeproj
+--disable wrapMultilineStatementBraces

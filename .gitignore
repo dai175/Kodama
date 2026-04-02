@@ -1,0 +1,35 @@
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Build artifacts
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+
+# Linter/Formatter cache
+.swiftformat.cache
+.swiftlint.cache
+
+# Claude Code
+.claude/
+!.claude/CLAUDE.md

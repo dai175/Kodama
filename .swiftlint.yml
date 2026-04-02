@@ -1,0 +1,67 @@
+# SwiftLint Configuration — Kodama
+
+included:
+  - Kodama
+  - KodamaTests
+  - KodamaUITests
+
+excluded:
+  - DerivedData
+  - .build
+
+# フォーマット系ルールはSwiftFormatに委譲
+disabled_rules:
+  - trailing_whitespace
+  - trailing_newline
+  - opening_brace
+  - closing_brace
+  - comma
+  - colon
+  - statement_position
+  - return_arrow_whitespace
+  - vertical_whitespace
+  - todo
+  - static_over_final_class
+
+opt_in_rules:
+  - force_unwrapping
+  - empty_count
+  - empty_string
+  - closure_spacing
+  - contains_over_first_not_nil
+  - discouraged_optional_boolean
+  - modifier_order
+  - overridden_super_call
+  - sorted_imports
+  - unowned_variable_capture
+  - private_action
+  - private_outlet
+
+line_length:
+  warning: 120
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - id
+    - x
+    - y
+    - z
+    - r
+    - g
+    - b
+    - i
+    - j
+    - k
+
+large_tuple:
+  warning: 3
+
+nesting:
+  type_level: 2
+
+reporter: xcode
