@@ -29,7 +29,7 @@ struct KodamaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TreeView()
+            RootView()
                 .environment(appState)
         }
         .modelContainer(sharedModelContainer)

@@ -19,6 +19,7 @@ struct TreeView: View {
     @State private var hasLoaded = false
     @State private var scnViewRef: SCNView?
     @State private var overlay = InteractionOverlayState()
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -35,8 +36,14 @@ struct TreeView: View {
                 viewModel: viewModel,
                 bonsaiScene: bonsaiScene,
                 scnView: scnViewRef,
-                overlayState: overlay
+                overlayState: overlay,
+                onSettingsTapped: { showSettings = true }
             )
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView {
+                handleTreeReset()
+            }
         }
         .onAppear {
             guard !hasLoaded else { return }
@@ -48,6 +55,13 @@ struct TreeView: View {
             viewModel.loadOrCreateTree(context: modelContext)
             bonsaiRenderer.renderTree(from: viewModel.blocks)
             viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+        }
+    }
+
+    private func handleTreeReset() {
+        viewModel.resetTree(context: modelContext)
+        if let bonsaiRenderer = renderer {
+            bonsaiRenderer.renderTree(from: viewModel.blocks)
         }
     }
 

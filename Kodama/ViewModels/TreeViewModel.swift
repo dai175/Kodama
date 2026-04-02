@@ -57,6 +57,24 @@ final class TreeViewModel {
         try? context.save()
     }
 
+    func resetTree(context: ModelContext) {
+        do {
+            try context.delete(model: VoxelBlock.self)
+            try context.delete(model: Interaction.self)
+            try context.delete(model: BonsaiTree.self)
+            try context.save()
+        } catch {
+            print("Failed to reset tree: \(error)")
+        }
+
+        blocks = []
+        currentTree = nil
+        pendingUserColor = nil
+        pendingInteractions = []
+
+        loadOrCreateTree(context: context)
+    }
+
     func loadOrCreateTree(context: ModelContext) {
         let descriptor = FetchDescriptor<BonsaiTree>()
         let trees = (try? context.fetch(descriptor)) ?? []
