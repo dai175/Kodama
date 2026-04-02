@@ -15,9 +15,46 @@ final class TreeViewModel {
 
     private(set) var blocks: [VoxelBlockData] = []
     private(set) var currentTree: BonsaiTree?
+    private(set) var pendingUserColor: String?
+    private(set) var pendingInteractions: [Interaction] = []
 
     var isFirstLaunch: Bool {
         currentTree == nil
+    }
+
+    // MARK: - User Interaction
+
+    func handleTouch(position: SCNVector3, context: ModelContext) {
+        guard let tree = currentTree else { return }
+        let interaction = Interaction(
+            type: .touch,
+            touchX: position.x,
+            touchY: position.y,
+            touchZ: position.z
+        )
+        interaction.tree = tree
+        context.insert(interaction)
+        pendingInteractions.append(interaction)
+        try? context.save()
+    }
+
+    func handleColor(hex: String, context: ModelContext) {
+        guard let tree = currentTree else { return }
+        pendingUserColor = hex
+        let interaction = Interaction(type: .color, value: hex)
+        interaction.tree = tree
+        context.insert(interaction)
+        pendingInteractions.append(interaction)
+        try? context.save()
+    }
+
+    func handleWord(text: String, context: ModelContext) {
+        guard let tree = currentTree else { return }
+        let interaction = Interaction(type: .word, value: text)
+        interaction.tree = tree
+        context.insert(interaction)
+        pendingInteractions.append(interaction)
+        try? context.save()
     }
 
     func loadOrCreateTree(context: ModelContext) {

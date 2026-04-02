@@ -17,21 +17,47 @@ struct TreeView: View {
     @State private var bonsaiScene = BonsaiScene()
     @State private var renderer: BonsaiRenderer?
     @State private var hasLoaded = false
+    @State private var scnViewRef: SCNView?
+    @State private var overlay = InteractionOverlayState()
 
     var body: some View {
-        SceneViewRepresentable(bonsaiScene: bonsaiScene)
+        ZStack {
+            SceneViewRepresentable(
+                bonsaiScene: bonsaiScene,
+                onSCNViewCreated: { scnViewRef = $0 },
+                onTreeTapped: { point, scnView in
+                    handleTreeTap(at: point, in: scnView)
+                }
+            )
             .ignoresSafeArea()
-            .onAppear {
-                guard !hasLoaded else { return }
-                hasLoaded = true
 
-                let bonsaiRenderer = BonsaiRenderer(bonsaiScene: bonsaiScene)
-                renderer = bonsaiRenderer
+            InteractionOverlay(
+                viewModel: viewModel,
+                bonsaiScene: bonsaiScene,
+                scnView: scnViewRef,
+                overlayState: overlay
+            )
+        }
+        .onAppear {
+            guard !hasLoaded else { return }
+            hasLoaded = true
 
-                viewModel.loadOrCreateTree(context: modelContext)
-                bonsaiRenderer.renderTree(from: viewModel.blocks)
-                viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
-            }
+            let bonsaiRenderer = BonsaiRenderer(bonsaiScene: bonsaiScene)
+            renderer = bonsaiRenderer
+
+            viewModel.loadOrCreateTree(context: modelContext)
+            bonsaiRenderer.renderTree(from: viewModel.blocks)
+            viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+        }
+    }
+
+    private func handleTreeTap(at point: CGPoint, in scnView: SCNView) {
+        guard let hitPosition = InteractionHandler.handleTouch(
+            at: point, in: scnView, scene: bonsaiScene
+        ) else { return }
+
+        viewModel.handleTouch(position: hitPosition, context: modelContext)
+        overlay.showPalette(touchPosition: hitPosition, screenPoint: point)
     }
 }
 
@@ -39,9 +65,11 @@ struct TreeView: View {
 
 struct SceneViewRepresentable: UIViewRepresentable {
     let bonsaiScene: BonsaiScene
+    var onSCNViewCreated: ((SCNView) -> Void)?
+    var onTreeTapped: ((CGPoint, SCNView) -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(bonsaiScene: bonsaiScene)
+        Coordinator(bonsaiScene: bonsaiScene, onTreeTapped: onTreeTapped)
     }
 
     func makeUIView(context: Context) -> SCNView {
@@ -56,12 +84,23 @@ struct SceneViewRepresentable: UIViewRepresentable {
         scnView.defaultCameraController.maximumVerticalAngle = 60
         scnView.defaultCameraController.inertiaEnabled = true
 
+        // Single tap for tree interaction
+        let singleTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleSingleTap(_:))
+        )
+        singleTap.numberOfTapsRequired = 1
+        scnView.addGestureRecognizer(singleTap)
+
         let doubleTap = UITapGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleDoubleTap(_:))
         )
         doubleTap.numberOfTapsRequired = 2
         scnView.addGestureRecognizer(doubleTap)
+
+        // Single tap should wait for double-tap to fail
+        singleTap.require(toFail: doubleTap)
 
         let touchRecognizer = UIPanGestureRecognizer(
             target: context.coordinator,
@@ -79,6 +118,7 @@ struct SceneViewRepresentable: UIViewRepresentable {
         scnView.addGestureRecognizer(pinchRecognizer)
 
         context.coordinator.scnView = scnView
+        onSCNViewCreated?(scnView)
 
         return scnView
     }
@@ -91,13 +131,21 @@ struct SceneViewRepresentable: UIViewRepresentable {
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let bonsaiScene: BonsaiScene
+        let onTreeTapped: ((CGPoint, SCNView) -> Void)?
         weak var scnView: SCNView?
 
-        init(bonsaiScene: BonsaiScene) {
+        init(bonsaiScene: BonsaiScene, onTreeTapped: ((CGPoint, SCNView) -> Void)?) {
             self.bonsaiScene = bonsaiScene
+            self.onTreeTapped = onTreeTapped
         }
 
         // MARK: - Gesture Handling
+
+        @objc func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let scnView else { return }
+            let point = gesture.location(in: scnView)
+            onTreeTapped?(point, scnView)
+        }
 
         @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended, let scnView else { return }
