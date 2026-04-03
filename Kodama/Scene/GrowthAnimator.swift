@@ -9,7 +9,7 @@ import SceneKit
 
 enum GrowthAnimator {
     /// Animates new blocks appearing with a scale-in effect, sorted by Y position (lower first).
-    static func animateNewBlocks(nodes: [SCNNode], in _: SCNScene) {
+    static func animateNewBlocks(nodes: [SCNNode]) {
         guard !nodes.isEmpty else { return }
 
         let sorted = nodes.sorted { $0.position.y < $1.position.y }
@@ -28,29 +28,5 @@ enum GrowthAnimator {
 
             node.runAction(sequence)
         }
-    }
-
-    /// Animates a leaf falling and fading out, then removes it.
-    static func animateLeafFall(node: SCNNode) {
-        let fall = SCNAction.moveBy(x: 0, y: -3, z: 0, duration: 1.5)
-        fall.timingMode = .easeIn
-        let fadeOut = SCNAction.fadeOut(duration: 1.5)
-        let group = SCNAction.group([fall, fadeOut])
-        let remove = SCNAction.removeFromParentNode()
-        let sequence = SCNAction.sequence([group, remove])
-
-        node.runAction(sequence)
-    }
-
-    /// Animates snow melting by shrinking and fading.
-    static func animateSnowMelt(node: SCNNode) {
-        let shrink = SCNAction.scale(to: 0, duration: 1.0)
-        shrink.timingMode = .easeIn
-        let fadeOut = SCNAction.fadeOut(duration: 1.0)
-        let group = SCNAction.group([shrink, fadeOut])
-        let remove = SCNAction.removeFromParentNode()
-        let sequence = SCNAction.sequence([group, remove])
-
-        node.runAction(sequence)
     }
 }

@@ -67,6 +67,12 @@ enum GrowthEngine {
         var newBlocks: [VoxelBlockData] = []
         var rng = SeededRandom(seed: UInt64(tree.seed) &+ UInt64(tree.totalBlocks))
 
+        // Pre-compute tip sets; updated incrementally to avoid O(n) per growBlock call
+        var parentIndices = Set(allBlocks.compactMap(\.parentIndex))
+        var tipIndices = Set(allBlocks.indices.filter {
+            !parentIndices.contains($0) && isGrowableTip(allBlocks[$0].blockType)
+        })
+
         for tick in 0 ..< elapsedHours {
             let tickDate = lastEval.addingTimeInterval(Double(tick) * 3600)
             let season = Season.current(from: tickDate)
@@ -76,12 +82,17 @@ enum GrowthEngine {
             for _ in 0 ..< growthCount {
                 guard allBlocks.count < 2000 else { return newBlocks }
 
-                if let block = growBlock(
+                if let (block, usedTipIndex) = growBlock(
                     allBlocks: allBlocks,
+                    tipIndices: tipIndices,
                     season: season,
                     rng: &rng,
                     pendingInteractions: pendingInteractions
                 ) {
+                    let newIndex = allBlocks.count
+                    parentIndices.insert(usedTipIndex)
+                    tipIndices.remove(usedTipIndex)
+                    if isGrowableTip(block.blockType) { tipIndices.insert(newIndex) }
                     allBlocks.append(block)
                     newBlocks.append(block)
                 }
@@ -92,6 +103,12 @@ enum GrowthEngine {
                 let thickenBlocks = thickenTrunk(allBlocks: allBlocks, rng: &rng)
                 for block in thickenBlocks {
                     guard allBlocks.count < 2000 else { break }
+                    let newIndex = allBlocks.count
+                    if let pi = block.parentIndex {
+                        parentIndices.insert(pi)
+                        tipIndices.remove(pi)
+                    }
+                    if isGrowableTip(block.blockType) { tipIndices.insert(newIndex) }
                     allBlocks.append(block)
                     newBlocks.append(block)
                 }
@@ -99,6 +116,10 @@ enum GrowthEngine {
         }
 
         return newBlocks
+    }
+
+    private static func isGrowableTip(_ blockType: BlockType) -> Bool {
+        blockType == .branch || blockType == .leaf || blockType == .trunk
     }
 
     // MARK: - Growth Rate
@@ -120,28 +141,21 @@ enum GrowthEngine {
 
     private static func growBlock(
         allBlocks: [VoxelBlockData],
+        tipIndices: Set<Int>,
         season: Season,
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
-    ) -> VoxelBlockData? {
-        // Find tips (blocks with no children referencing them)
-        let parentIndices = Set(allBlocks.compactMap(\.parentIndex))
-        var tipIndices = allBlocks.indices.filter { !parentIndices.contains($0) }
-
-        // Only grow from branch/leaf tips
-        tipIndices = tipIndices.filter { i in
-            let bt = allBlocks[i].blockType
-            return bt == .branch || bt == .leaf || bt == .trunk
-        }
-
+    ) -> (VoxelBlockData, Int)? {
         guard !tipIndices.isEmpty else { return nil }
+
+        let tipArray = Array(tipIndices)
 
         // Weight tips by proximity to touch interactions
         let touchInteraction = pendingInteractions.first { $0.type == .touch && $0.touchX != nil }
         let selectedTipIndex: Int
 
         if let touch = touchInteraction, let tx = touch.touchX, let ty = touch.touchY, let tz = touch.touchZ {
-            let weights: [Double] = tipIndices.map { i in
+            let weights: [Double] = tipArray.map { i in
                 let block = allBlocks[i]
                 let dx = Double(block.x - tx)
                 let dy = Double(block.y - ty)
@@ -149,9 +163,9 @@ enum GrowthEngine {
                 let dist = sqrt(dx * dx + dy * dy + dz * dz)
                 return 1.0 / (dist + 1.0)
             }
-            selectedTipIndex = weightedSelect(indices: tipIndices, weights: weights, rng: &rng)
+            selectedTipIndex = weightedSelect(indices: tipArray, weights: weights, rng: &rng)
         } else {
-            selectedTipIndex = tipIndices[Int(rng.next() % UInt64(tipIndices.count))]
+            selectedTipIndex = tipArray[Int(rng.next() % UInt64(tipArray.count))]
         }
 
         let tip = allBlocks[selectedTipIndex]
@@ -167,29 +181,21 @@ enum GrowthEngine {
         )
 
         // Determine direction with upward bias
-        let direction = growthDirection(
-            from: tip,
-            allBlocks: allBlocks,
-            rng: &rng,
-            pendingInteractions: pendingInteractions
-        )
+        let direction = growthDirection(rng: &rng, pendingInteractions: pendingInteractions)
 
         let newX = tip.x + direction.0
         let newY = tip.y + direction.1
         let newZ = tip.z + direction.2
 
         // Avoid overlapping existing blocks
-        let overlaps = allBlocks.contains { block in
-            abs(block.x - newX) < 0.5 && abs(block.y - newY) < 0.5 && abs(block.z - newZ) < 0.5
-        }
-        guard !overlaps else { return nil }
+        guard !allBlocks.contains(where: { $0.overlaps(x: newX, y: newY, z: newZ) }) else { return nil }
 
         // Don't grow below ground
         guard newY >= 0 else { return nil }
 
         let color = blockColor(for: blockType, season: season, rng: &rng)
 
-        return VoxelBlockData(
+        let block = VoxelBlockData(
             x: newX,
             y: newY,
             z: newZ,
@@ -197,6 +203,7 @@ enum GrowthEngine {
             colorHex: color,
             parentIndex: selectedTipIndex
         )
+        return (block, selectedTipIndex)
     }
 
     // MARK: - Block Type Determination
@@ -232,8 +239,6 @@ enum GrowthEngine {
     // MARK: - Growth Direction
 
     private static func growthDirection(
-        from _: VoxelBlockData,
-        allBlocks _: [VoxelBlockData],
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
     ) -> (Float, Float, Float) {
@@ -317,11 +322,7 @@ enum GrowthEngine {
             let newX = trunkBlock.x + offset.0
             let newZ = trunkBlock.z + offset.1
 
-            let overlaps = allBlocks.contains { block in
-                abs(block.x - newX) < 0.5 && abs(block.y - trunkBlock.y) < 0.5 && abs(block.z - newZ) < 0.5
-            }
-
-            if !overlaps {
+            if !allBlocks.contains(where: { $0.overlaps(x: newX, y: trunkBlock.y, z: newZ) }) {
                 let color = TreeBuilder.trunkColors[Int(rng.next() % UInt64(TreeBuilder.trunkColors.count))]
                 newBlocks.append(VoxelBlockData(
                     x: newX,

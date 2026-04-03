@@ -3,14 +3,12 @@
 //  Kodama
 //
 
-import SwiftData
 import SwiftUI
 
 // MARK: - SettingsView
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
     @Environment(AppState.self) private var appState
 
     var onTreeReset: () -> Void = {}
@@ -21,8 +19,6 @@ struct SettingsView: View {
     #if DEBUG
         @State private var seasonOverride: Season? = Season.debugOverride
     #endif
-
-    private let softWhite = Color(red: 232 / 255, green: 228 / 255, blue: 220 / 255)
 
     var body: some View {
         NavigationStack {
@@ -40,7 +36,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(softWhite.opacity(0.7))
+                        .foregroundStyle(Color.softWhite.opacity(0.7))
                 }
             }
             .preferredColorScheme(.dark)
@@ -69,22 +65,22 @@ struct SettingsView: View {
         Section {
             HStack {
                 Text("Kodama")
-                    .foregroundStyle(softWhite.opacity(0.8))
+                    .foregroundStyle(Color.softWhite.opacity(0.8))
                 Spacer()
                 Text("v1.0")
-                    .foregroundStyle(softWhite.opacity(0.4))
+                    .foregroundStyle(Color.softWhite.opacity(0.4))
             }
             .listRowBackground(Color.white.opacity(0.05))
 
             HStack {
                 Text("by focuswave")
-                    .foregroundStyle(softWhite.opacity(0.5))
+                    .foregroundStyle(Color.softWhite.opacity(0.5))
                     .font(.system(size: 14, weight: .light))
             }
             .listRowBackground(Color.white.opacity(0.05))
         } header: {
             Text("About")
-                .foregroundStyle(softWhite.opacity(0.4))
+                .foregroundStyle(Color.softWhite.opacity(0.4))
         }
     }
 
@@ -101,7 +97,7 @@ struct SettingsView: View {
             .listRowBackground(Color.white.opacity(0.05))
         } header: {
             Text("Data")
-                .foregroundStyle(softWhite.opacity(0.4))
+                .foregroundStyle(Color.softWhite.opacity(0.4))
         }
     }
 
@@ -112,10 +108,10 @@ struct SettingsView: View {
             Section {
                 HStack {
                     Text("Current Season")
-                        .foregroundStyle(softWhite.opacity(0.8))
+                        .foregroundStyle(Color.softWhite.opacity(0.8))
                     Spacer()
                     Text(Season.current().rawValue.capitalized)
-                        .foregroundStyle(softWhite.opacity(0.5))
+                        .foregroundStyle(Color.softWhite.opacity(0.5))
                 }
                 .listRowBackground(Color.white.opacity(0.05))
 
@@ -125,14 +121,14 @@ struct SettingsView: View {
                         Text(season.rawValue.capitalized).tag(Season?.some(season))
                     }
                 }
-                .foregroundStyle(softWhite.opacity(0.8))
+                .foregroundStyle(Color.softWhite.opacity(0.8))
                 .listRowBackground(Color.white.opacity(0.05))
                 .onChange(of: seasonOverride) {
                     Season.debugOverride = seasonOverride
                 }
             } header: {
                 Text("Debug")
-                    .foregroundStyle(softWhite.opacity(0.4))
+                    .foregroundStyle(Color.softWhite.opacity(0.4))
             }
         }
     #endif
@@ -140,15 +136,6 @@ struct SettingsView: View {
     // MARK: - Reset Action
 
     private func performReset() {
-        do {
-            try modelContext.delete(model: VoxelBlock.self)
-            try modelContext.delete(model: Interaction.self)
-            try modelContext.delete(model: BonsaiTree.self)
-            try modelContext.save()
-        } catch {
-            print("Failed to reset tree data: \(error)")
-        }
-
         onTreeReset()
         dismiss()
     }

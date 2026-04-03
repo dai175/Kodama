@@ -15,8 +15,6 @@ final class TreeViewModel {
 
     private(set) var blocks: [VoxelBlockData] = []
     private(set) var currentTree: BonsaiTree?
-    private(set) var pendingUserColor: String?
-    private(set) var pendingInteractions: [Interaction] = []
 
     var isFirstLaunch: Bool {
         currentTree == nil
@@ -34,17 +32,14 @@ final class TreeViewModel {
         )
         interaction.tree = tree
         context.insert(interaction)
-        pendingInteractions.append(interaction)
         try? context.save()
     }
 
     func handleColor(hex: String, context: ModelContext) {
         guard let tree = currentTree else { return }
-        pendingUserColor = hex
         let interaction = Interaction(type: .color, value: hex)
         interaction.tree = tree
         context.insert(interaction)
-        pendingInteractions.append(interaction)
         try? context.save()
     }
 
@@ -53,7 +48,6 @@ final class TreeViewModel {
         let interaction = Interaction(type: .word, value: text)
         interaction.tree = tree
         context.insert(interaction)
-        pendingInteractions.append(interaction)
         try? context.save()
     }
 
@@ -69,8 +63,6 @@ final class TreeViewModel {
 
         blocks = []
         currentTree = nil
-        pendingUserColor = nil
-        pendingInteractions = []
 
         loadOrCreateTree(context: context)
     }
@@ -134,11 +126,11 @@ final class TreeViewModel {
             return
         }
 
-        persistNewBlocks(growthResult.newBlocks, tree: tree, context: context)
+        persistBlocks(growthResult.newBlocks, tree: tree, context: context)
         applySeasonalColorChanges(seasonal.colorChanges, tree: tree)
         let removedIndices = removeSeasonalBlocks(seasonal, tree: tree, context: context)
 
-        persistSeasonalBlocks(snow: seasonal.newSnowBlocks, moss: seasonal.newMossBlocks, tree: tree, context: context)
+        persistBlocks(seasonal.newSnowBlocks + seasonal.newMossBlocks, tree: tree, context: context)
         updateTreeState(
             tree: tree,
             added: growthResult.newBlocks,
@@ -167,8 +159,8 @@ final class TreeViewModel {
             || !seasonal.expiredFlowers.isEmpty
     }
 
-    private func persistNewBlocks(_ newBlocks: [VoxelBlockData], tree: BonsaiTree, context: ModelContext) {
-        for blockData in newBlocks {
+    private func persistBlocks(_ blocks: [VoxelBlockData], tree: BonsaiTree, context: ModelContext) {
+        for blockData in blocks {
             let voxelBlock = VoxelBlock(
                 x: blockData.x, y: blockData.y, z: blockData.z,
                 blockType: blockData.blockType, colorHex: blockData.colorHex, source: .autonomous
@@ -214,22 +206,6 @@ final class TreeViewModel {
         return fallenIndices.union(expiredFlowerIndices).union(removedSnowIndices)
     }
 
-    private func persistSeasonalBlocks(
-        snow: [VoxelBlockData],
-        moss: [VoxelBlockData],
-        tree: BonsaiTree,
-        context: ModelContext
-    ) {
-        for blockData in snow + moss {
-            let voxelBlock = VoxelBlock(
-                x: blockData.x, y: blockData.y, z: blockData.z,
-                blockType: blockData.blockType, colorHex: blockData.colorHex, source: .autonomous
-            )
-            voxelBlock.tree = tree
-            context.insert(voxelBlock)
-        }
-    }
-
     private func updateTreeState(
         tree: BonsaiTree,
         added: [VoxelBlockData],
@@ -263,7 +239,7 @@ final class TreeViewModel {
             node.name == "treeDynamic" || node.name == "treeRoot" ? Array(node.childNodes) : [node]
         }
         let newNodes = Array(allChildren.suffix(count))
-        GrowthAnimator.animateNewBlocks(nodes: newNodes, in: renderer.bonsaiScene.scene)
+        GrowthAnimator.animateNewBlocks(nodes: newNodes)
     }
 
     private func voxelBlockToData(_ block: VoxelBlock) -> VoxelBlockData {
