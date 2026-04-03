@@ -81,7 +81,7 @@ enum SeasonalEngine {
 
         switch season {
         case .spring:
-            applySpringEffects(to: blocks, result: &result, blockDates: blockDates)
+            applySpringEffects(to: blocks, result: &result)
         case .summer:
             applySummerEffects(to: blocks, rng: &rng, elapsedDays: elapsedDays, result: &result)
         case .autumn:
@@ -89,6 +89,9 @@ enum SeasonalEngine {
         case .winter:
             applyWinterEffects(to: blocks, rng: &rng, elapsedDays: elapsedDays, result: &result)
         }
+
+        // Expire flowers older than 14 days regardless of season
+        expireOldFlowers(blocks: blocks, blockDates: blockDates, maxDays: 14, result: &result)
 
         return result
     }
@@ -129,16 +132,12 @@ enum SeasonalEngine {
 
     private static func applySpringEffects(
         to blocks: [VoxelBlockData],
-        result: inout SeasonalResult,
-        blockDates: [Date?]
+        result: inout SeasonalResult
     ) {
         // Remove snow blocks in spring
         for (index, block) in blocks.enumerated() where block.blockType == .snow {
             result.removedSnow.append(index)
         }
-
-        // Remove expired flowers (older than 14 days)
-        expireOldFlowers(blocks: blocks, blockDates: blockDates, maxDays: 14, result: &result)
     }
 
     private static func applySummerEffects(
@@ -186,7 +185,6 @@ enum SeasonalEngine {
     ) {
         transitionLeafColors(blocks: blocks, rng: &rng, result: &result)
         cleanupGroundLeaves(blocks: blocks, blockDates: blockDates, maxDays: 7, result: &result)
-        expireOldFlowers(blocks: blocks, blockDates: blockDates, maxDays: 14, result: &result)
     }
 
     private static func transitionLeafColors(
@@ -259,12 +257,14 @@ enum SeasonalEngine {
             result.fallenLeaves.append(index)
         }
 
-        // Add snow on top surfaces (1-3 per day)
-        let snowCount = min(Int(rng.next() % 3) + 1, max(1, elapsedDays)) // 1-3
+        // Add snow on top surfaces (1-3 per day, scaled by elapsed days)
+        let perDay = Int(rng.next() % 3) + 1 // 1-3 per day
+        let snowCount = min(perDay * max(1, elapsedDays), 20)
 
         // Find topmost block at each (x, z) position
         var topBlocks: [String: (index: Int, block: VoxelBlockData)] = [:]
-        for (index, block) in blocks.enumerated() where block.blockType != .snow {
+        for (index, block) in blocks.enumerated()
+            where block.blockType != .snow && !result.fallenLeaves.contains(index) {
             let key = "\(block.x),\(block.z)"
             if let existing = topBlocks[key] {
                 if block.y > existing.block.y {
@@ -306,10 +306,17 @@ enum SeasonalEngine {
 
     private static func hexToRGB(_ hex: String) -> (Int, Int, Int) {
         let hexString = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard hexString.count == 6,
+              hexString.allSatisfy(\.isHexDigit)
+        else {
+            assertionFailure("Invalid hex color string: \(hexString)")
+            return (0, 0, 0)
+        }
         let scanner = Scanner(string: hexString)
         var hexNumber: UInt64 = 0
-        if !scanner.scanHexInt64(&hexNumber) {
+        if !scanner.scanHexInt64(&hexNumber) || !scanner.isAtEnd {
             assertionFailure("Invalid hex color string: \(hexString)")
+            return (0, 0, 0)
         }
 
         let r = Int((hexNumber & 0xFF0000) >> 16)
