@@ -73,6 +73,9 @@ enum GrowthEngine {
             !parentIndices.contains($0) && isGrowableTip(allBlocks[$0].blockType)
         })
 
+        var occupiedPositions = Set(allBlocks.map { "\($0.x),\($0.y),\($0.z)" })
+        var currentMaxY = allBlocks.map(\.y).max() ?? 0
+
         for tick in 0 ..< elapsedHours {
             let tickDate = lastEval.addingTimeInterval(Double(tick) * 3600)
             let season = Season.current(from: tickDate)
@@ -85,6 +88,8 @@ enum GrowthEngine {
                 if let (block, usedTipIndex) = growBlock(
                     allBlocks: allBlocks,
                     tipIndices: tipIndices,
+                    occupiedPositions: &occupiedPositions,
+                    maxY: currentMaxY,
                     season: season,
                     rng: &rng,
                     pendingInteractions: pendingInteractions
@@ -93,6 +98,8 @@ enum GrowthEngine {
                     parentIndices.insert(usedTipIndex)
                     tipIndices.remove(usedTipIndex)
                     if isGrowableTip(block.blockType) { tipIndices.insert(newIndex) }
+                    occupiedPositions.insert("\(block.x),\(block.y),\(block.z)")
+                    currentMaxY = max(currentMaxY, block.y)
                     allBlocks.append(block)
                     newBlocks.append(block)
                 }
@@ -100,7 +107,7 @@ enum GrowthEngine {
 
             // Trigger thickening near every 50-block milestone; window accounts for multi-block ticks
             if allBlocks.count >= 50, allBlocks.count % 50 < growthCount + 1 {
-                let thickenBlocks = thickenTrunk(allBlocks: allBlocks, rng: &rng)
+                let thickenBlocks = thickenTrunk(allBlocks: allBlocks, occupiedPositions: &occupiedPositions, rng: &rng)
                 for block in thickenBlocks {
                     guard allBlocks.count < 2000 else { break }
                     let newIndex = allBlocks.count
@@ -109,6 +116,8 @@ enum GrowthEngine {
                         tipIndices.remove(pi)
                     }
                     if isGrowableTip(block.blockType) { tipIndices.insert(newIndex) }
+                    occupiedPositions.insert("\(block.x),\(block.y),\(block.z)")
+                    currentMaxY = max(currentMaxY, block.y)
                     allBlocks.append(block)
                     newBlocks.append(block)
                 }
@@ -139,9 +148,12 @@ enum GrowthEngine {
 
     // MARK: - Block Growth
 
+    // swiftlint:disable:next function_parameter_count
     private static func growBlock(
         allBlocks: [VoxelBlockData],
         tipIndices: Set<Int>,
+        occupiedPositions: inout Set<String>,
+        maxY: Float,
         season: Season,
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
@@ -169,7 +181,6 @@ enum GrowthEngine {
         }
 
         let tip = allBlocks[selectedTipIndex]
-        let maxY = allBlocks.map(\.y).max() ?? 0
         let isHighUp = tip.y > maxY * 0.6
 
         // Determine block type
@@ -188,7 +199,7 @@ enum GrowthEngine {
         let newZ = tip.z + direction.2
 
         // Avoid overlapping existing blocks
-        guard !allBlocks.contains(where: { $0.overlaps(x: newX, y: newY, z: newZ) }) else { return nil }
+        guard !occupiedPositions.contains("\(newX),\(newY),\(newZ)") else { return nil }
 
         // Don't grow below ground
         guard newY >= 0 else { return nil }
@@ -309,7 +320,11 @@ enum GrowthEngine {
 
     // MARK: - Trunk Thickening
 
-    private static func thickenTrunk(allBlocks: [VoxelBlockData], rng: inout SeededRandom) -> [VoxelBlockData] {
+    private static func thickenTrunk(
+        allBlocks: [VoxelBlockData],
+        occupiedPositions: inout Set<String>,
+        rng: inout SeededRandom
+    ) -> [VoxelBlockData] {
         let trunkBlocks = allBlocks.enumerated().filter { $0.element.blockType == .trunk }
         guard !trunkBlocks.isEmpty else { return [] }
 
@@ -323,7 +338,7 @@ enum GrowthEngine {
             let newX = trunkBlock.x + offset.0
             let newZ = trunkBlock.z + offset.1
 
-            if !allBlocks.contains(where: { $0.overlaps(x: newX, y: trunkBlock.y, z: newZ) }) {
+            if !occupiedPositions.contains("\(newX),\(trunkBlock.y),\(newZ)") {
                 let color = TreeBuilder.trunkColors[Int(rng.next() % UInt64(TreeBuilder.trunkColors.count))]
                 newBlocks.append(VoxelBlockData(
                     x: newX,

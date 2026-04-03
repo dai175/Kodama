@@ -127,10 +127,12 @@ final class TreeViewModel {
 
         let pendingInteractions = tree.interactions.filter { $0.timestamp > tree.lastGrowthEval }
         let treeBlocks = tree.blocks
+        let treeBlockLookup: [String: VoxelBlock] = Dictionary(
+            treeBlocks.map { ("\($0.x),\($0.y),\($0.z)", $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let blockDates: [Date?] = blocks.map { data in
-            treeBlocks.first(where: {
-                $0.x == data.x && $0.y == data.y && $0.z == data.z
-            })?.placedAt
+            treeBlockLookup["\(data.x),\(data.y),\(data.z)"]?.placedAt
         }
 
         let growthResult = GrowthEngine.calculateGrowthWithSeasons(
@@ -148,8 +150,8 @@ final class TreeViewModel {
         }
 
         persistBlocks(growthResult.newBlocks, tree: tree, context: context)
-        applySeasonalColorChanges(seasonal.colorChanges, tree: tree)
-        let removedIndices = removeSeasonalBlocks(seasonal, tree: tree, context: context)
+        applySeasonalColorChanges(seasonal.colorChanges, treeBlockLookup: treeBlockLookup)
+        let removedIndices = removeSeasonalBlocks(seasonal, treeBlockLookup: treeBlockLookup, context: context)
 
         persistBlocks(seasonal.newSnowBlocks + seasonal.newMossBlocks, tree: tree, context: context)
         updateTreeState(
@@ -194,16 +196,16 @@ final class TreeViewModel {
         }
     }
 
-    private func applySeasonalColorChanges(_ changes: [(blockIndex: Int, newColor: String)], tree: BonsaiTree) {
+    private func applySeasonalColorChanges(
+        _ changes: [(blockIndex: Int, newColor: String)],
+        treeBlockLookup: [String: VoxelBlock]
+    ) {
         for change in changes {
             guard change.blockIndex < blocks.count else { continue }
-            let target = blocks[change.blockIndex]
-            if let treeBlock = tree.blocks.first(where: {
-                $0.x == target.x && $0.y == target.y && $0.z == target.z
-            }) {
+            let old = blocks[change.blockIndex]
+            if let treeBlock = treeBlockLookup["\(old.x),\(old.y),\(old.z)"] {
                 treeBlock.colorHex = change.newColor
             }
-            let old = blocks[change.blockIndex]
             blocks[change.blockIndex] = VoxelBlockData(
                 x: old.x, y: old.y, z: old.z,
                 blockType: old.blockType, colorHex: change.newColor, parentIndex: old.parentIndex
@@ -213,27 +215,26 @@ final class TreeViewModel {
 
     private func removeSeasonalBlocks(
         _ seasonal: SeasonalResult,
-        tree: BonsaiTree,
+        treeBlockLookup: [String: VoxelBlock],
         context: ModelContext
     ) -> Set<Int> {
-        let treeBlocks = tree.blocks
         let fallenIndices = seasonal.fallenLeaves
         for index in fallenIndices {
-            if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
+            if let treeBlock = findTreeBlock(at: index, treeBlockLookup: treeBlockLookup) {
                 context.delete(treeBlock)
             }
         }
 
         let expiredFlowerIndices = seasonal.expiredFlowers
         for index in expiredFlowerIndices where !fallenIndices.contains(index) {
-            if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
+            if let treeBlock = findTreeBlock(at: index, treeBlockLookup: treeBlockLookup) {
                 context.delete(treeBlock)
             }
         }
 
         let removedSnowIndices = seasonal.removedSnow
         for index in removedSnowIndices {
-            if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
+            if let treeBlock = findTreeBlock(at: index, treeBlockLookup: treeBlockLookup) {
                 context.delete(treeBlock)
             }
         }
@@ -241,10 +242,10 @@ final class TreeViewModel {
         return fallenIndices.union(expiredFlowerIndices).union(removedSnowIndices)
     }
 
-    private func findTreeBlock(at index: Int, in treeBlocks: [VoxelBlock]) -> VoxelBlock? {
+    private func findTreeBlock(at index: Int, treeBlockLookup: [String: VoxelBlock]) -> VoxelBlock? {
         guard index < blocks.count else { return nil }
         let data = blocks[index]
-        return treeBlocks.first { $0.x == data.x && $0.y == data.y && $0.z == data.z }
+        return treeBlockLookup["\(data.x),\(data.y),\(data.z)"]
     }
 
     private func updateTreeState(
