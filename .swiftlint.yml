@@ -58,6 +58,18 @@ identifier_name:
     - j
     - k
 
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+type_body_length:
+  warning: 300
+  error: 400
+
+function_body_length:
+  warning: 60
+  error: 100
+
 large_tuple:
   warning: 3
 
