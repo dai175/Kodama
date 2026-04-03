@@ -94,10 +94,13 @@ final class TreeViewModel {
             }
 
             tree.totalBlocks = saplingBlocks.count
-            try? context.save()
-
-            currentTree = tree
-            blocks = saplingBlocks
+            do {
+                try context.save()
+                currentTree = tree
+                blocks = saplingBlocks
+            } catch {
+                print("Failed to save new tree: \(error)")
+            }
         }
     }
 
@@ -137,14 +140,17 @@ final class TreeViewModel {
             seasonal: seasonal,
             removedCount: removedIndices.count
         )
-        try? context.save()
-
-        updateInMemoryBlocks(newBlocks: growthResult.newBlocks, seasonal: seasonal, removedIndices: removedIndices)
-        renderer.renderTree(from: blocks)
-        animateNewNodes(
-            renderer: renderer,
-            count: growthResult.newBlocks.count + seasonal.newSnowBlocks.count + seasonal.newMossBlocks.count
-        )
+        do {
+            try context.save()
+            updateInMemoryBlocks(newBlocks: growthResult.newBlocks, seasonal: seasonal, removedIndices: removedIndices)
+            renderer.renderTree(from: blocks)
+            animateNewNodes(
+                renderer: renderer,
+                count: growthResult.newBlocks.count + seasonal.newSnowBlocks.count + seasonal.newMossBlocks.count
+            )
+        } catch {
+            print("Failed to save growth changes: \(error)")
+        }
     }
 
     // MARK: Private
@@ -199,7 +205,7 @@ final class TreeViewModel {
         }
 
         let removedSnowIndices = Set(seasonal.removedSnow)
-        for index in seasonal.removedSnow where index < tree.blocks.count {
+        for index in removedSnowIndices where index < tree.blocks.count {
             context.delete(tree.blocks[index])
         }
 

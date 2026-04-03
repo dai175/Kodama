@@ -137,15 +137,15 @@ struct SceneViewRepresentable: UIViewRepresentable {
         return scnView
     }
 
-    func updateUIView(_: SCNView, context _: Context) {
-        // No dynamic updates needed yet
+    func updateUIView(_: SCNView, context: Context) {
+        context.coordinator.onTreeTapped = onTreeTapped
     }
 
     // MARK: - Coordinator
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let bonsaiScene: BonsaiScene
-        let onTreeTapped: ((CGPoint, SCNView) -> Void)?
+        var onTreeTapped: ((CGPoint, SCNView) -> Void)?
         weak var scnView: SCNView?
 
         init(bonsaiScene: BonsaiScene, onTreeTapped: ((CGPoint, SCNView) -> Void)?) {
@@ -199,4 +199,5 @@ struct SceneViewRepresentable: UIViewRepresentable {
 
 #Preview {
     TreeView()
+        .modelContainer(for: [BonsaiTree.self, VoxelBlock.self, Interaction.self], inMemory: true)
 }

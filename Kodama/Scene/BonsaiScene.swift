@@ -55,8 +55,10 @@ final class BonsaiScene {
 
     func scheduleAutoRotationResume() {
         idleTimer?.invalidate()
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
-            self?.resumeAutoRotation()
+        DispatchQueue.main.async { [weak self] in
+            self?.idleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+                self?.resumeAutoRotation()
+            }
         }
     }
 
