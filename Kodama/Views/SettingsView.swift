@@ -30,7 +30,7 @@ struct SettingsView: View {
                 #endif
             }
             .scrollContentBackground(.hidden)
-            .background(Color(red: 10 / 255, green: 26 / 255, blue: 18 / 255))
+            .background(Color(uiColor: .darkForest))
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

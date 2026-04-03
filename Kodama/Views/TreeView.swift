@@ -92,7 +92,7 @@ struct SceneViewRepresentable: UIViewRepresentable {
         scnView.pointOfView = bonsaiScene.cameraNode
         scnView.preferredFramesPerSecond = 60
         scnView.antialiasingMode = .multisampling4X
-        scnView.backgroundColor = UIColor(red: 10 / 255, green: 26 / 255, blue: 18 / 255, alpha: 1)
+        scnView.backgroundColor = UIColor.darkForest
         scnView.allowsCameraControl = true
         scnView.defaultCameraController.interactionMode = .orbitTurntable
         scnView.defaultCameraController.maximumVerticalAngle = 60
