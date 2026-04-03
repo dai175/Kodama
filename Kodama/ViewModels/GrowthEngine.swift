@@ -233,8 +233,7 @@ enum GrowthEngine {
         }
 
         if isHighUp {
-            // High up: flower(10% in spring) / leaf(50% in spring, 60% otherwise) / branch(40% in spring, 40%
-            // otherwise)
+            // High up: flower(10% in spring only) / leaf(50% in spring, 60% otherwise) / branch(40%)
             if season == .spring, roll < 10 {
                 return .flower
             } else if roll < 60 {
