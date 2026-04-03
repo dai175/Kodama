@@ -113,7 +113,12 @@ final class TreeViewModel {
         context.insert(openInteraction)
 
         let pendingInteractions = tree.interactions.filter { $0.timestamp > tree.lastGrowthEval }
-        let blockDates: [Date?] = tree.blocks.map(\.placedAt)
+        let treeBlocks = tree.blocks
+        let blockDates: [Date?] = blocks.map { data in
+            treeBlocks.first(where: {
+                $0.x == data.x && $0.y == data.y && $0.z == data.z
+            })?.placedAt
+        }
 
         let growthResult = GrowthEngine.calculateGrowthWithSeasons(
             tree: tree,
@@ -178,9 +183,13 @@ final class TreeViewModel {
 
     private func applySeasonalColorChanges(_ changes: [(blockIndex: Int, newColor: String)], tree: BonsaiTree) {
         for change in changes {
-            guard change.blockIndex < tree.blocks.count else { continue }
-            tree.blocks[change.blockIndex].colorHex = change.newColor
             guard change.blockIndex < blocks.count else { continue }
+            let target = blocks[change.blockIndex]
+            if let treeBlock = tree.blocks.first(where: {
+                $0.x == target.x && $0.y == target.y && $0.z == target.z
+            }) {
+                treeBlock.colorHex = change.newColor
+            }
             let old = blocks[change.blockIndex]
             blocks[change.blockIndex] = VoxelBlockData(
                 x: old.x, y: old.y, z: old.z,
@@ -194,22 +203,35 @@ final class TreeViewModel {
         tree: BonsaiTree,
         context: ModelContext
     ) -> Set<Int> {
+        let treeBlocks = tree.blocks
         let fallenIndices = Set(seasonal.fallenLeaves)
-        for index in seasonal.fallenLeaves where index < tree.blocks.count {
-            context.delete(tree.blocks[index])
+        for index in seasonal.fallenLeaves {
+            if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
+                context.delete(treeBlock)
+            }
         }
 
         let expiredFlowerIndices = Set(seasonal.expiredFlowers)
-        for index in seasonal.expiredFlowers where index < tree.blocks.count && !fallenIndices.contains(index) {
-            context.delete(tree.blocks[index])
+        for index in seasonal.expiredFlowers where !fallenIndices.contains(index) {
+            if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
+                context.delete(treeBlock)
+            }
         }
 
         let removedSnowIndices = Set(seasonal.removedSnow)
-        for index in removedSnowIndices where index < tree.blocks.count {
-            context.delete(tree.blocks[index])
+        for index in removedSnowIndices {
+            if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
+                context.delete(treeBlock)
+            }
         }
 
         return fallenIndices.union(expiredFlowerIndices).union(removedSnowIndices)
+    }
+
+    private func findTreeBlock(at index: Int, in treeBlocks: [VoxelBlock]) -> VoxelBlock? {
+        guard index < blocks.count else { return nil }
+        let data = blocks[index]
+        return treeBlocks.first { $0.x == data.x && $0.y == data.y && $0.z == data.z }
     }
 
     private func updateTreeState(
