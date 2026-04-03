@@ -18,6 +18,7 @@ struct TreeView: View {
     @State private var bonsaiScene = BonsaiScene()
     @State private var renderer: BonsaiRenderer?
     @State private var hasLoaded = false
+    @State private var isLoading = true
     @State private var scnViewRef: SCNView?
     @State private var overlay = InteractionOverlayState()
     @State private var showSettings = false
@@ -32,14 +33,21 @@ struct TreeView: View {
                 }
             )
             .ignoresSafeArea()
+            .opacity(isLoading ? 0 : 1)
 
-            InteractionOverlay(
-                viewModel: viewModel,
-                bonsaiScene: bonsaiScene,
-                scnView: scnViewRef,
-                overlayState: overlay,
-                onSettingsTapped: { showSettings = true }
-            )
+            if isLoading {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                InteractionOverlay(
+                    viewModel: viewModel,
+                    bonsaiScene: bonsaiScene,
+                    scnView: scnViewRef,
+                    overlayState: overlay,
+                    onSettingsTapped: { showSettings = true }
+                )
+            }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView {
@@ -53,13 +61,18 @@ struct TreeView: View {
             let bonsaiRenderer = BonsaiRenderer(bonsaiScene: bonsaiScene)
             renderer = bonsaiRenderer
 
-            viewModel.loadOrCreateTree(context: modelContext)
-            bonsaiRenderer.renderTree(from: viewModel.blocks)
-            viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+            Task {
+                viewModel.loadOrCreateTree(context: modelContext)
+                bonsaiRenderer.renderTree(from: viewModel.blocks)
+                viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+                isLoading = false
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active, let bonsaiRenderer = renderer else { return }
-            viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+            Task {
+                viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+            }
         }
     }
 
