@@ -34,6 +34,10 @@ final class VoxelBlock {
         set { blockTypeRaw = newValue.rawValue }
     }
 
+    var positionKey: PositionKey {
+        PositionKey(x: x, y: y, z: z)
+    }
+
     var source: GrowthSource {
         get {
             guard let type = GrowthSource(rawValue: sourceRaw) else {

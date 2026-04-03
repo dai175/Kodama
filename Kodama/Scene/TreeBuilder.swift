@@ -20,6 +20,18 @@ struct VoxelBlockData {
     func overlaps(x ox: Float, y oy: Float, z oz: Float) -> Bool {
         abs(x - ox) < 0.5 && abs(y - oy) < 0.5 && abs(z - oz) < 0.5
     }
+
+    var positionKey: PositionKey {
+        PositionKey(x: x, y: y, z: z)
+    }
+}
+
+// MARK: - PositionKey
+
+struct PositionKey: Hashable {
+    let x: Float
+    let y: Float
+    let z: Float
 }
 
 // MARK: - SeededRandom
