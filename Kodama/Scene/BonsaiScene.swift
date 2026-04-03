@@ -69,11 +69,13 @@ final class BonsaiScene {
                 UIColor(red: 10 / 255, green: 26 / 255, blue: 18 / 255, alpha: 1).cgColor,
                 UIColor(red: 13 / 255, green: 40 / 255, blue: 24 / 255, alpha: 1).cgColor
             ]
+            // swiftlint:disable force_unwrapping
             let gradient = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
                 colors: colors as CFArray,
                 locations: [0, 1]
-            )!
+            )! // CGGradient with valid colorspace and locations never returns nil
+            // swiftlint:enable force_unwrapping
             context.cgContext.drawLinearGradient(
                 gradient,
                 start: CGPoint(x: 0, y: 0),

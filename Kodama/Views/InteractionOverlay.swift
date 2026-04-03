@@ -4,6 +4,7 @@
 //
 
 import SceneKit
+import SwiftData
 import SwiftUI
 
 // MARK: - InteractionOverlayState
