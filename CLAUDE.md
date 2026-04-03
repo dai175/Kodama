@@ -18,17 +18,22 @@ xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' b
 
 # Test
 xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' test
+
+# Lint
+swiftlint
+
+# Format
+swiftformat .
 ```
 
 ## Project Structure
 
-Current: Xcode template (initial commit). Target structure per `docs/kodama-mvp-spec.md`:
-
-- `Kodama/App/` - App entry point, app state
-- `Kodama/Models/` - SwiftData models (BonsaiTree, VoxelBlock, Interaction)
-- `Kodama/Views/` - SwiftUI views (TreeView, InteractionOverlay, Onboarding, Settings)
+- `Kodama/KodamaApp.swift` - App entry point
+- `Kodama/App/` - AppState (`@Observable`)
+- `Kodama/Models/` - SwiftData models (BonsaiTree, VoxelBlock, Interaction, Season, BlockType, GrowthSource)
+- `Kodama/Views/` - SwiftUI views (RootView, TreeView, InteractionOverlay, Onboarding, Settings, ColorPalette, WordInput)
 - `Kodama/ViewModels/` - TreeViewModel, GrowthEngine
-- `Kodama/Scene/` - SceneKit (BonsaiScene, BonsaiRenderer, TreeBuilder, SeasonalEngine)
+- `Kodama/Scene/` - SceneKit (BonsaiScene, BonsaiRenderer, TreeBuilder, SeasonalEngine, GrowthAnimator, InteractionHandler)
 
 ## Key Specs
 
@@ -38,6 +43,13 @@ Current: Xcode template (initial commit). Target structure per `docs/kodama-mvp-
 - Seasons from real-world date affect growth rate and leaf colors
 - No sound, no haptics, no network — purely local, quiet experience
 
+## Code Style
+
+- Observation: use `@Observable` class (not `ObservableObject`)
+- Environment: `.environment(obj)` + `@Environment(Type.self)` pattern
+- SwiftData: `@Model` macro, `@Relationship(deleteRule: .cascade)`
+- Auto-formatted with SwiftFormat (`.swiftformat`) and SwiftLint (`.swiftlint.yml`)
+
 ## Gotchas
 
 - SceneKit uses `UIViewRepresentable` bridge — not native SwiftUI
@@ -45,3 +57,4 @@ Current: Xcode template (initial commit). Target structure per `docs/kodama-mvp-
 - Use `flattenedClone()` for static tree parts
 - Growth is calculated, not real-time — catch-up on app open
 - Dark theme only, no pure white/black colors
+- SwiftFormat uses `--swiftversion 6.1` (separate from pbxproj `SWIFT_VERSION = 5.0` — to be unified later)
