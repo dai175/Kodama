@@ -25,7 +25,7 @@ struct TreeView: View {
         ZStack {
             SceneViewRepresentable(
                 bonsaiScene: bonsaiScene,
-                onSCNViewCreated: { scnView in DispatchQueue.main.async { scnViewRef = scnView } },
+                onSCNViewCreated: { scnView in scnViewRef = scnView },
                 onTreeTapped: { point, scnView in
                     handleTreeTap(at: point, in: scnView)
                 }
