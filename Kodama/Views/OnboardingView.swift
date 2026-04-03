@@ -12,8 +12,6 @@ struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @State private var currentPage = 0
 
-    private let softWhite = Color(red: 232 / 255, green: 228 / 255, blue: 220 / 255)
-
     var body: some View {
         ZStack {
             LinearGradient(
@@ -68,14 +66,14 @@ struct OnboardingView: View {
             VStack(spacing: 16) {
                 Text(title)
                     .font(.system(size: 20, weight: .light, design: .default))
-                    .foregroundStyle(softWhite.opacity(0.8))
+                    .foregroundStyle(Color.softWhite.opacity(0.8))
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
 
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 14, weight: .light, design: .default))
-                        .foregroundStyle(softWhite.opacity(0.5))
+                        .foregroundStyle(Color.softWhite.opacity(0.5))
                         .multilineTextAlignment(.center)
                 }
 
@@ -85,12 +83,12 @@ struct OnboardingView: View {
                     } label: {
                         Text("Begin")
                             .font(.system(size: 18, weight: .light, design: .default))
-                            .foregroundStyle(softWhite.opacity(0.9))
+                            .foregroundStyle(Color.softWhite.opacity(0.9))
                             .padding(.horizontal, 48)
                             .padding(.vertical, 12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 24)
-                                    .stroke(softWhite.opacity(0.3), lineWidth: 1)
+                                    .stroke(Color.softWhite.opacity(0.3), lineWidth: 1)
                             )
                     }
                     .padding(.top, 24)

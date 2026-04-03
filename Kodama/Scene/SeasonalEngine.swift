@@ -85,7 +85,7 @@ enum SeasonalEngine {
         case .summer:
             applySummerEffects(to: blocks, rng: &rng, elapsedDays: elapsedDays, result: &result)
         case .autumn:
-            applyAutumnEffects(to: blocks, rng: &rng, elapsedDays: elapsedDays, result: &result, blockDates: blockDates)
+            applyAutumnEffects(to: blocks, rng: &rng, result: &result, blockDates: blockDates)
         case .winter:
             applyWinterEffects(to: blocks, rng: &rng, elapsedDays: elapsedDays, result: &result)
         }
@@ -163,11 +163,7 @@ enum SeasonalEngine {
             let mossZ = trunkBlock.z + offset.1
 
             // Check no block already exists there
-            let overlaps = blocks.contains { b in
-                abs(b.x - mossX) < 0.5 && abs(b.y - trunkBlock.y) < 0.5 && abs(b.z - mossZ) < 0.5
-            }
-
-            if !overlaps {
+            if !blocks.contains(where: { $0.overlaps(x: mossX, y: trunkBlock.y, z: mossZ) }) {
                 result.newMossBlocks.append(VoxelBlockData(
                     x: mossX,
                     y: trunkBlock.y,
@@ -183,7 +179,6 @@ enum SeasonalEngine {
     private static func applyAutumnEffects(
         to blocks: [VoxelBlockData],
         rng: inout SeededRandom,
-        elapsedDays _: Int,
         result: inout SeasonalResult,
         blockDates: [Date?]
     ) {
@@ -287,7 +282,7 @@ enum SeasonalEngine {
 
             // Check no snow block already exists at this position
             let alreadyHasSnow = blocks.contains { b in
-                b.blockType == .snow && abs(b.x - entry.block.x) < 0.5 && abs(b.z - entry.block.z) < 0.5
+                b.blockType == .snow && b.overlaps(x: entry.block.x, y: b.y, z: entry.block.z)
             }
 
             if !alreadyHasSnow {

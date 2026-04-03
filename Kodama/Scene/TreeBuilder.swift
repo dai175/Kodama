@@ -4,6 +4,7 @@
 //
 
 import SceneKit
+import SwiftUI
 import UIKit
 
 // MARK: - VoxelBlockData
@@ -15,6 +16,10 @@ struct VoxelBlockData {
     let blockType: BlockType
     let colorHex: String
     let parentIndex: Int?
+
+    func overlaps(x ox: Float, y oy: Float, z oz: Float) -> Bool {
+        abs(x - ox) < 0.5 && abs(y - oy) < 0.5 && abs(z - oz) < 0.5
+    }
 }
 
 // MARK: - SeededRandom
@@ -168,6 +173,12 @@ enum TreeBuilder {
         cache[colorHex] = box
         return box
     }
+}
+
+// MARK: - Color Extension
+
+extension Color {
+    static let softWhite = Color(red: 232 / 255, green: 228 / 255, blue: 220 / 255)
 }
 
 // MARK: - UIColor Hex Extension

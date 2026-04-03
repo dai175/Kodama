@@ -17,7 +17,7 @@ struct ColorPaletteView: View {
         ("#5A9E3A", Color(red: 90 / 255, green: 158 / 255, blue: 58 / 255)),
         ("#4A7DB8", Color(red: 74 / 255, green: 125 / 255, blue: 184 / 255)),
         ("#8B5AA0", Color(red: 139 / 255, green: 90 / 255, blue: 160 / 255)),
-        ("#E8E4DC", Color(red: 232 / 255, green: 228 / 255, blue: 220 / 255))
+        ("#E8E4DC", Color.softWhite)
     ]
 
     var body: some View {

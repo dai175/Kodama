@@ -206,7 +206,7 @@ final class BonsaiScene {
     private func setupRotation() {
         rotationNode.name = "rotationRoot"
         scene.rootNode.addChildNode(rotationNode)
-        resumeAutoRotation()
+        rotationNode.runAction(rotationAction, forKey: "autoRotate")
     }
 
     private func resumeAutoRotation() {

@@ -16,7 +16,7 @@ struct WordInputView: View {
     var body: some View {
         TextField("", text: $text)
             .font(.system(size: 18, weight: .light, design: .default))
-            .foregroundStyle(Color(red: 232 / 255, green: 228 / 255, blue: 220 / 255))
+            .foregroundStyle(Color.softWhite)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(Color.black.opacity(0.4))

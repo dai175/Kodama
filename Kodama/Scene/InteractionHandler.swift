@@ -125,12 +125,9 @@ enum InteractionHandler {
         textNode.position = startPosition
 
         // Face the camera
-        if let cameraNode = scnView.pointOfView {
-            let constraint = SCNBillboardConstraint()
-            constraint.freeAxes = .all
-            textNode.constraints = [constraint]
-            _ = cameraNode // suppress unused warning
-        }
+        let constraint = SCNBillboardConstraint()
+        constraint.freeAxes = .all
+        textNode.constraints = [constraint]
 
         scnView.scene?.rootNode.addChildNode(textNode)
 

@@ -56,7 +56,7 @@ struct InteractionOverlay: View {
                     Button(action: onSettingsTapped) {
                         Image(systemName: "gearshape")
                             .font(.system(size: 22))
-                            .foregroundStyle(Color(red: 232 / 255, green: 228 / 255, blue: 220 / 255))
+                            .foregroundStyle(Color.softWhite)
                             .opacity(0.5)
                     }
                     .padding(.trailing, 20)
