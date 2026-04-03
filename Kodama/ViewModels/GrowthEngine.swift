@@ -73,7 +73,7 @@ enum GrowthEngine {
             !parentIndices.contains($0) && isGrowableTip(allBlocks[$0].blockType)
         })
 
-        var occupiedPositions = Set(allBlocks.map { "\($0.x),\($0.y),\($0.z)" })
+        var occupiedPositions = Set(allBlocks.map(\.positionKey))
         var currentMaxY = allBlocks.map(\.y).max() ?? 0
 
         for tick in 0 ..< elapsedHours {
@@ -98,7 +98,7 @@ enum GrowthEngine {
                     parentIndices.insert(usedTipIndex)
                     tipIndices.remove(usedTipIndex)
                     if isGrowableTip(block.blockType) { tipIndices.insert(newIndex) }
-                    occupiedPositions.insert("\(block.x),\(block.y),\(block.z)")
+                    occupiedPositions.insert(block.positionKey)
                     currentMaxY = max(currentMaxY, block.y)
                     allBlocks.append(block)
                     newBlocks.append(block)
@@ -116,7 +116,7 @@ enum GrowthEngine {
                         tipIndices.remove(pi)
                     }
                     if isGrowableTip(block.blockType) { tipIndices.insert(newIndex) }
-                    occupiedPositions.insert("\(block.x),\(block.y),\(block.z)")
+                    occupiedPositions.insert(block.positionKey)
                     currentMaxY = max(currentMaxY, block.y)
                     allBlocks.append(block)
                     newBlocks.append(block)
@@ -152,7 +152,7 @@ enum GrowthEngine {
     private static func growBlock(
         allBlocks: [VoxelBlockData],
         tipIndices: Set<Int>,
-        occupiedPositions: inout Set<String>,
+        occupiedPositions: inout Set<PositionKey>,
         maxY: Float,
         season: Season,
         rng: inout SeededRandom,
@@ -199,7 +199,7 @@ enum GrowthEngine {
         let newZ = tip.z + direction.2
 
         // Avoid overlapping existing blocks
-        guard !occupiedPositions.contains("\(newX),\(newY),\(newZ)") else { return nil }
+        guard !occupiedPositions.contains(PositionKey(x: newX, y: newY, z: newZ)) else { return nil }
 
         // Don't grow below ground
         guard newY >= 0 else { return nil }
@@ -322,7 +322,7 @@ enum GrowthEngine {
 
     private static func thickenTrunk(
         allBlocks: [VoxelBlockData],
-        occupiedPositions: inout Set<String>,
+        occupiedPositions: inout Set<PositionKey>,
         rng: inout SeededRandom
     ) -> [VoxelBlockData] {
         let trunkBlocks = allBlocks.enumerated().filter { $0.element.blockType == .trunk }
@@ -338,7 +338,7 @@ enum GrowthEngine {
             let newX = trunkBlock.x + offset.0
             let newZ = trunkBlock.z + offset.1
 
-            if !occupiedPositions.contains("\(newX),\(trunkBlock.y),\(newZ)") {
+            if !occupiedPositions.contains(PositionKey(x: newX, y: trunkBlock.y, z: newZ)) {
                 let color = TreeBuilder.trunkColors[Int(rng.next() % UInt64(TreeBuilder.trunkColors.count))]
                 newBlocks.append(VoxelBlockData(
                     x: newX,

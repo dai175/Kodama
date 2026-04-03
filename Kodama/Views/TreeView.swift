@@ -17,7 +17,6 @@ struct TreeView: View {
     @State private var viewModel = TreeViewModel()
     @State private var bonsaiScene = BonsaiScene()
     @State private var renderer: BonsaiRenderer?
-    @State private var hasLoaded = false
     @State private var isLoading = true
     @State private var scnViewRef: SCNView?
     @State private var overlay = InteractionOverlayState()
@@ -55,8 +54,7 @@ struct TreeView: View {
             }
         }
         .onAppear {
-            guard !hasLoaded else { return }
-            hasLoaded = true
+            guard isLoading else { return }
 
             let bonsaiRenderer = BonsaiRenderer(bonsaiScene: bonsaiScene)
             renderer = bonsaiRenderer
