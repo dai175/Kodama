@@ -13,6 +13,7 @@ import SwiftUI
 
 struct TreeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel = TreeViewModel()
     @State private var bonsaiScene = BonsaiScene()
     @State private var renderer: BonsaiRenderer?
@@ -56,12 +57,17 @@ struct TreeView: View {
             bonsaiRenderer.renderTree(from: viewModel.blocks)
             viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active, let bonsaiRenderer = renderer else { return }
+            viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+        }
     }
 
     private func handleTreeReset() {
         viewModel.resetTree(context: modelContext)
         if let bonsaiRenderer = renderer {
             bonsaiRenderer.renderTree(from: viewModel.blocks)
+            viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
         }
     }
 
