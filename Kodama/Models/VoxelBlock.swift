@@ -24,12 +24,24 @@ final class VoxelBlock {
     var tree: BonsaiTree?
 
     var blockType: BlockType {
-        get { BlockType(rawValue: blockTypeRaw) ?? .trunk }
+        get {
+            guard let type = BlockType(rawValue: blockTypeRaw) else {
+                assertionFailure("Unknown blockTypeRaw: \(blockTypeRaw)")
+                return .trunk
+            }
+            return type
+        }
         set { blockTypeRaw = newValue.rawValue }
     }
 
     var source: GrowthSource {
-        get { GrowthSource(rawValue: sourceRaw) ?? .autonomous }
+        get {
+            guard let type = GrowthSource(rawValue: sourceRaw) else {
+                assertionFailure("Unknown sourceRaw: \(sourceRaw)")
+                return .autonomous
+            }
+            return type
+        }
         set { sourceRaw = newValue.rawValue }
     }
 
