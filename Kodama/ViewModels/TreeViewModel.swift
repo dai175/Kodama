@@ -70,14 +70,12 @@ final class TreeViewModel {
             try context.delete(model: Interaction.self)
             try context.delete(model: BonsaiTree.self)
             try context.save()
+            blocks = []
+            currentTree = nil
+            loadOrCreateTree(context: context)
         } catch {
             print("Failed to reset tree: \(error)")
         }
-
-        blocks = []
-        currentTree = nil
-
-        loadOrCreateTree(context: context)
     }
 
     func loadOrCreateTree(context: ModelContext) {
@@ -199,16 +197,13 @@ final class TreeViewModel {
         _ changes: [(blockIndex: Int, newColor: String)],
         treeBlockLookup: [PositionKey: VoxelBlock]
     ) {
+        // DB entities only — in-memory update happens in updateInMemoryBlocks after save
         for change in changes {
             guard change.blockIndex < blocks.count else { continue }
             let old = blocks[change.blockIndex]
             if let treeBlock = treeBlockLookup[old.positionKey] {
                 treeBlock.colorHex = change.newColor
             }
-            blocks[change.blockIndex] = VoxelBlockData(
-                x: old.x, y: old.y, z: old.z,
-                blockType: old.blockType, colorHex: change.newColor, parentIndex: old.parentIndex
-            )
         }
     }
 
@@ -262,6 +257,15 @@ final class TreeViewModel {
         seasonal: SeasonalResult,
         removedIndices: Set<Int>
     ) {
+        // Apply color changes first — indices reference the pre-removal array
+        for change in seasonal.colorChanges {
+            guard change.blockIndex < blocks.count else { continue }
+            let old = blocks[change.blockIndex]
+            blocks[change.blockIndex] = VoxelBlockData(
+                x: old.x, y: old.y, z: old.z,
+                blockType: old.blockType, colorHex: change.newColor, parentIndex: old.parentIndex
+            )
+        }
         if !removedIndices.isEmpty {
             blocks = blocks.enumerated().compactMap { index, block in
                 removedIndices.contains(index) ? nil : block

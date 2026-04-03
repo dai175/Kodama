@@ -18,7 +18,7 @@ final class BonsaiRenderer {
 
         let treeNode = TreeBuilder.buildSCNNodes(from: blocks)
 
-        assert(
+        precondition(
             blocks.count == treeNode.childNodes.count,
             "Block count (\(blocks.count)) must match child node count (\(treeNode.childNodes.count))"
         )
