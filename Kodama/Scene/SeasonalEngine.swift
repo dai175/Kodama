@@ -9,11 +9,11 @@ import Foundation
 
 struct SeasonalResult {
     var colorChanges: [(blockIndex: Int, newColor: String)]
-    var fallenLeaves: [Int]
+    var fallenLeaves: Set<Int>
     var newSnowBlocks: [VoxelBlockData]
-    var removedSnow: [Int]
+    var removedSnow: Set<Int>
     var newMossBlocks: [VoxelBlockData]
-    var expiredFlowers: [Int]
+    var expiredFlowers: Set<Int>
 
     static let empty = SeasonalResult(
         colorChanges: [],
@@ -136,7 +136,7 @@ enum SeasonalEngine {
     ) {
         // Remove snow blocks in spring
         for (index, block) in blocks.enumerated() where block.blockType == .snow {
-            result.removedSnow.append(index)
+            result.removedSnow.insert(index)
         }
     }
 
@@ -210,7 +210,7 @@ enum SeasonalEngine {
             if let nextColor = autumnColorProgression(currentHex: currentColor) {
                 result.colorChanges.append((blockIndex: blockIndex, newColor: nextColor))
             } else if currentColor.uppercased() == "#8B6914", rng.next() % 100 < 30 {
-                result.fallenLeaves.append(blockIndex)
+                result.fallenLeaves.insert(blockIndex)
             }
         }
     }
@@ -226,7 +226,7 @@ enum SeasonalEngine {
             guard index < blockDates.count, let placedAt = blockDates[index] else { continue }
             let daysSincePlaced = Calendar.current.dateComponents([.day], from: placedAt, to: now).day ?? 0
             guard daysSincePlaced > maxDays, !result.fallenLeaves.contains(index) else { continue }
-            result.fallenLeaves.append(index)
+            result.fallenLeaves.insert(index)
         }
     }
 
@@ -241,7 +241,7 @@ enum SeasonalEngine {
             guard index < blockDates.count, let placedAt = blockDates[index] else { continue }
             let daysSincePlaced = Calendar.current.dateComponents([.day], from: placedAt, to: now).day ?? 0
             guard daysSincePlaced > maxDays else { continue }
-            result.expiredFlowers.append(index)
+            result.expiredFlowers.insert(index)
         }
     }
 
@@ -254,7 +254,7 @@ enum SeasonalEngine {
         // Remaining leaves fall (20% chance per tick)
         for index in blocks.indices where blocks[index].blockType == .leaf {
             guard rng.next() % 100 < 20 else { continue }
-            result.fallenLeaves.append(index)
+            result.fallenLeaves.insert(index)
         }
 
         // Add snow on top surfaces (1-3 per day, scaled by elapsed days)
@@ -307,18 +307,12 @@ enum SeasonalEngine {
     private static func hexToRGB(_ hex: String) -> (Int, Int, Int) {
         let hexString = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard hexString.count == 6,
-              hexString.allSatisfy(\.isHexDigit)
+              hexString.allSatisfy(\.isHexDigit),
+              let hexNumber = UInt64(hexString, radix: 16)
         else {
             assertionFailure("Invalid hex color string: \(hexString)")
             return (0, 0, 0)
         }
-        let scanner = Scanner(string: hexString)
-        var hexNumber: UInt64 = 0
-        if !scanner.scanHexInt64(&hexNumber) || !scanner.isAtEnd {
-            assertionFailure("Invalid hex color string: \(hexString)")
-            return (0, 0, 0)
-        }
-
         let r = Int((hexNumber & 0xFF0000) >> 16)
         let g = Int((hexNumber & 0x00FF00) >> 8)
         let b = Int(hexNumber & 0x0000FF)

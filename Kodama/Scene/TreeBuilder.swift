@@ -184,16 +184,21 @@ extension Color {
 // MARK: - UIColor Hex Extension
 
 extension UIColor {
+    static let darkForest = UIColor(red: 10 / 255, green: 26 / 255, blue: 18 / 255, alpha: 1)
+
     convenience init(hex: String) {
         let hexString = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-        let scanner = Scanner(string: hexString)
-        var hexNumber: UInt64 = 0
-        scanner.scanHexInt64(&hexNumber)
-
+        guard hexString.count == 6,
+              hexString.allSatisfy(\.isHexDigit),
+              let hexNumber = UInt64(hexString, radix: 16)
+        else {
+            assertionFailure("Invalid hex color string: \(hexString)")
+            self.init(red: 0, green: 0, blue: 0, alpha: 1)
+            return
+        }
         let red = CGFloat((hexNumber & 0xFF0000) >> 16) / 255
         let green = CGFloat((hexNumber & 0x00FF00) >> 8) / 255
         let blue = CGFloat(hexNumber & 0x0000FF) / 255
-
         self.init(red: red, green: green, blue: blue, alpha: 1)
     }
 }

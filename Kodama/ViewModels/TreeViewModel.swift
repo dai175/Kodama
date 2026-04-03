@@ -217,21 +217,21 @@ final class TreeViewModel {
         context: ModelContext
     ) -> Set<Int> {
         let treeBlocks = tree.blocks
-        let fallenIndices = Set(seasonal.fallenLeaves)
-        for index in seasonal.fallenLeaves {
+        let fallenIndices = seasonal.fallenLeaves
+        for index in fallenIndices {
             if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
                 context.delete(treeBlock)
             }
         }
 
-        let expiredFlowerIndices = Set(seasonal.expiredFlowers)
-        for index in seasonal.expiredFlowers where !fallenIndices.contains(index) {
+        let expiredFlowerIndices = seasonal.expiredFlowers
+        for index in expiredFlowerIndices where !fallenIndices.contains(index) {
             if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
                 context.delete(treeBlock)
             }
         }
 
-        let removedSnowIndices = Set(seasonal.removedSnow)
+        let removedSnowIndices = seasonal.removedSnow
         for index in removedSnowIndices {
             if let treeBlock = findTreeBlock(at: index, in: treeBlocks) {
                 context.delete(treeBlock)
