@@ -284,7 +284,7 @@ enum SeasonalEngine {
 
             // Check no snow block already exists at this position (including blocks added in this pass)
             let alreadyHasSnow = blocks.contains { b in
-                b.blockType == .snow && b.overlaps(x: entry.block.x, y: b.y, z: entry.block.z)
+                b.blockType == .snow && b.overlaps(x: entry.block.x, y: snowY, z: entry.block.z)
             } || result.newSnowBlocks.contains { b in
                 b.overlaps(x: entry.block.x, y: snowY, z: entry.block.z)
             }
@@ -308,7 +308,9 @@ enum SeasonalEngine {
         let hexString = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         let scanner = Scanner(string: hexString)
         var hexNumber: UInt64 = 0
-        scanner.scanHexInt64(&hexNumber)
+        if !scanner.scanHexInt64(&hexNumber) {
+            assertionFailure("Invalid hex color string: \(hexString)")
+        }
 
         let r = Int((hexNumber & 0xFF0000) >> 16)
         let g = Int((hexNumber & 0x00FF00) >> 8)
