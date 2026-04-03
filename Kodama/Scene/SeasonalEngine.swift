@@ -162,8 +162,10 @@ enum SeasonalEngine {
             let mossX = trunkBlock.x + offset.0
             let mossZ = trunkBlock.z + offset.1
 
-            // Check no block already exists there
-            if !blocks.contains(where: { $0.overlaps(x: mossX, y: trunkBlock.y, z: mossZ) }) {
+            // Check no block already exists there (including blocks added in this pass)
+            let alreadyExists = blocks.contains(where: { $0.overlaps(x: mossX, y: trunkBlock.y, z: mossZ) })
+                || result.newMossBlocks.contains(where: { $0.overlaps(x: mossX, y: trunkBlock.y, z: mossZ) })
+            if !alreadyExists {
                 result.newMossBlocks.append(VoxelBlockData(
                     x: mossX,
                     y: trunkBlock.y,
@@ -280,9 +282,11 @@ enum SeasonalEngine {
             let entry = topEntries[Int(rng.next() % UInt64(topEntries.count))]
             let snowY = entry.block.y + 1
 
-            // Check no snow block already exists at this position
+            // Check no snow block already exists at this position (including blocks added in this pass)
             let alreadyHasSnow = blocks.contains { b in
                 b.blockType == .snow && b.overlaps(x: entry.block.x, y: b.y, z: entry.block.z)
+            } || result.newSnowBlocks.contains { b in
+                b.overlaps(x: entry.block.x, y: snowY, z: entry.block.z)
             }
 
             if !alreadyHasSnow {

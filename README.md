@@ -57,7 +57,7 @@ swiftformat .
 
 ## Project Structure
 
-```
+```text
 Kodama/
 ├── KodamaApp.swift       # App entry point
 ├── App/                  # AppState
