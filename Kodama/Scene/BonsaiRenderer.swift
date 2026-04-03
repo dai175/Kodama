@@ -30,9 +30,10 @@ final class BonsaiRenderer {
         dynamicNode.name = "treeDynamic"
 
         for (block, child) in zip(blocks, treeNode.childNodes) {
-            if block.blockType == .trunk || block.blockType == .branch {
+            switch block.blockType {
+            case .trunk, .branch:
                 staticNode.addChildNode(child)
-            } else {
+            case .leaf, .flower, .moss, .snow:
                 dynamicNode.addChildNode(child)
             }
         }

@@ -9,6 +9,7 @@ import SwiftData
 
 // MARK: - TreeViewModel
 
+@MainActor
 @Observable
 final class TreeViewModel {
     // MARK: Internal
@@ -32,7 +33,11 @@ final class TreeViewModel {
         )
         interaction.tree = tree
         context.insert(interaction)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save touch interaction: \(error)")
+        }
     }
 
     func handleColor(hex: String, context: ModelContext) {
@@ -40,7 +45,11 @@ final class TreeViewModel {
         let interaction = Interaction(type: .color, value: hex)
         interaction.tree = tree
         context.insert(interaction)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save color interaction: \(error)")
+        }
     }
 
     func handleWord(text: String, context: ModelContext) {
@@ -48,7 +57,11 @@ final class TreeViewModel {
         let interaction = Interaction(type: .word, value: text)
         interaction.tree = tree
         context.insert(interaction)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save word interaction: \(error)")
+        }
     }
 
     func resetTree(context: ModelContext) {

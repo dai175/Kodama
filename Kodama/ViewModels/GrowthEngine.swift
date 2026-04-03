@@ -98,7 +98,7 @@ enum GrowthEngine {
                 }
             }
 
-            // Trunk thickening every 50 total blocks
+            // Trigger thickening near every 50-block milestone; window accounts for multi-block ticks
             if allBlocks.count >= 50, allBlocks.count % 50 < growthCount + 1 {
                 let thickenBlocks = thickenTrunk(allBlocks: allBlocks, rng: &rng)
                 for block in thickenBlocks {
