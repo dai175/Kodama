@@ -59,6 +59,11 @@ struct SettingsView: View {
         }
     }
 
+    private var appVersionLabel: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        return "v\(version)"
+    }
+
     // MARK: - About
 
     private var aboutSection: some View {
@@ -67,7 +72,7 @@ struct SettingsView: View {
                 Text("Kodama")
                     .foregroundStyle(Color.softWhite.opacity(0.8))
                 Spacer()
-                Text("v1.0")
+                Text(appVersionLabel)
                     .foregroundStyle(Color.softWhite.opacity(0.4))
             }
             .listRowBackground(Color.white.opacity(0.05))
