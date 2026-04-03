@@ -142,6 +142,7 @@ final class TreeViewModel {
 
         let seasonal = growthResult.seasonalEffects
         guard hasSeasonalChanges(newBlocks: growthResult.newBlocks, seasonal: seasonal) else {
+            tree.lastGrowthEval = Date()
             try? context.save()
             return
         }

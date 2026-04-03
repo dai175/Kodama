@@ -9,7 +9,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppState.self) private var appState
 
     var onTreeReset: () -> Void = {}
 
