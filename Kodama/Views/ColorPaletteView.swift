@@ -36,6 +36,7 @@ struct ColorPaletteView: View {
     }
 
     private func arcOffset(for index: Int, total: Int) -> CGFloat {
+        guard total > 1 else { return 0 }
         let mid = CGFloat(total - 1) / 2.0
         let normalized = (CGFloat(index) - mid) / mid
         return normalized * normalized * 12

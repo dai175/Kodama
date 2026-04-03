@@ -67,6 +67,8 @@ enum InteractionHandler {
         particleSystem.blendMode = .additive
         particleSystem.isAffectedByGravity = false
 
+        guard let scene = scnView.scene else { return }
+
         // Unproject the screen point to get a 3D position near the camera
         let nearPoint = scnView.unprojectPoint(SCNVector3(Float(point.x), Float(point.y), 0.9))
 
@@ -77,7 +79,7 @@ enum InteractionHandler {
         // Orient toward target
         emitterNode.look(at: target)
 
-        scnView.scene?.rootNode.addChildNode(emitterNode)
+        scene.rootNode.addChildNode(emitterNode)
 
         // Stop emitting after a short burst, then remove
         let stopEmitting = SCNAction.run { node in
@@ -129,7 +131,8 @@ enum InteractionHandler {
         constraint.freeAxes = .all
         textNode.constraints = [constraint]
 
-        scnView.scene?.rootNode.addChildNode(textNode)
+        guard let scene = scnView.scene else { return }
+        scene.rootNode.addChildNode(textNode)
 
         // Animate: scale down + move toward tree + fade out
         let duration = 0.8

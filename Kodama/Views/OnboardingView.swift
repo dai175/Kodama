@@ -79,7 +79,9 @@ struct OnboardingView: View {
 
                 if showButton {
                     Button {
-                        appState.hasCompletedOnboarding = true
+                        withAnimation(.easeInOut(duration: 1.0)) {
+                            appState.hasCompletedOnboarding = true
+                        }
                     } label: {
                         Text("Begin")
                             .font(.system(size: 18, weight: .light, design: .default))

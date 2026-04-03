@@ -22,7 +22,13 @@ final class Interaction {
     var tree: BonsaiTree?
 
     var type: InteractionType {
-        get { InteractionType(rawValue: typeRaw) ?? .open }
+        get {
+            guard let interactionType = InteractionType(rawValue: typeRaw) else {
+                assertionFailure("Invalid typeRaw value: \(typeRaw). Defaulting to .open")
+                return .open
+            }
+            return interactionType
+        }
         set { typeRaw = newValue.rawValue }
     }
 

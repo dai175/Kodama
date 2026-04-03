@@ -97,6 +97,9 @@ struct InteractionOverlay: View {
                 scheduleAutoHide()
             }
         }
+        .onDisappear {
+            autoHideTask?.cancel()
+        }
     }
 
     // MARK: - Color Selection

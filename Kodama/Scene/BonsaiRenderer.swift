@@ -18,6 +18,11 @@ final class BonsaiRenderer {
 
         let treeNode = TreeBuilder.buildSCNNodes(from: blocks)
 
+        assert(
+            blocks.count == treeNode.childNodes.count,
+            "Block count (\(blocks.count)) must match child node count (\(treeNode.childNodes.count))"
+        )
+
         // Separate static (trunk/branch) and dynamic (leaf/flower/moss/snow) blocks
         // Use index-based matching — buildSCNNodes preserves block array order
         let staticNode = SCNNode()
