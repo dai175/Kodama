@@ -101,7 +101,7 @@ enum TreeBuilder {
     static let branchColors = ["#5A4530", "#4D3B28"]
     static let leafColors = ["#7AB648", "#5A9E3A", "#68B040"]
 
-    static func growthStage(for blocks: [VoxelBlockData]) -> GrowthStage {
+    nonisolated static func growthStage(for blocks: [VoxelBlockData]) -> GrowthStage {
         let structuralCount = blocks.count(where: { $0.blockType == .trunk || $0.blockType == .branch })
         let foliageCount = blocks.count(where: { $0.blockType == .leaf || $0.blockType == .flower })
         let heightInBlocks = Int((blocks.map(\.y).max() ?? 0) / VoxelConstants.blockSize)

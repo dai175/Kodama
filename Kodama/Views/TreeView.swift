@@ -57,12 +57,14 @@ struct TreeView: View {
                             print("[TimeTravel] ABORT: renderer is nil")
                             return
                         }
-                        viewModel.timeTravel(
-                            component: component,
-                            value: value,
-                            context: modelContext,
-                            renderer: bonsaiRenderer
-                        )
+                        Task {
+                            await viewModel.timeTravel(
+                                component: component,
+                                value: value,
+                                context: modelContext,
+                                renderer: bonsaiRenderer
+                            )
+                        }
                     },
                     debugTreeInfo: viewModel.currentTree.map {
                         (
@@ -87,14 +89,14 @@ struct TreeView: View {
             Task {
                 viewModel.loadOrCreateTree(context: modelContext)
                 bonsaiRenderer.renderTree(from: viewModel.blocks)
-                viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+                await viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
                 isLoading = false
             }
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active, let bonsaiRenderer = renderer else { return }
             Task {
-                viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+                await viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
             }
         }
     }
@@ -103,7 +105,9 @@ struct TreeView: View {
         viewModel.resetTree(context: modelContext)
         if let bonsaiRenderer = renderer {
             bonsaiRenderer.renderTree(from: viewModel.blocks)
-            viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+            Task {
+                await viewModel.evaluateGrowth(context: modelContext, renderer: bonsaiRenderer)
+            }
         }
     }
 

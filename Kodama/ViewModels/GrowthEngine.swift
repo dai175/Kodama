@@ -12,6 +12,20 @@ struct GrowthResult {
     let seasonalEffects: SeasonalResult
 }
 
+struct GrowthTreeState {
+    let seed: Int
+    let totalBlocks: Int
+}
+
+struct InteractionPayload {
+    let timestamp: Date
+    let type: InteractionType
+    let value: String?
+    let touchX: Float?
+    let touchY: Float?
+    let touchZ: Float?
+}
+
 // MARK: - GrowthEngine
 
 // swiftlint:disable type_body_length
@@ -21,12 +35,43 @@ enum GrowthEngine {
     // MARK: - Growth Calculation
 
     /// Pure function: takes existing state, returns new blocks and seasonal effects.
-    static func calculateGrowthWithSeasons(
+    nonisolated static func calculateGrowthWithSeasons(
         tree: BonsaiTree,
         existingBlocks: [VoxelBlockData],
         since lastEval: Date,
         currentDate: Date = Date(),
         pendingInteractions: [Interaction] = [],
+        blockDates: [Date?] = [],
+        maxElapsedHours: Int = 168
+    ) -> GrowthResult {
+        let interactionPayloads = pendingInteractions.map {
+            InteractionPayload(
+                timestamp: $0.timestamp,
+                type: $0.type,
+                value: $0.value,
+                touchX: $0.touchX,
+                touchY: $0.touchY,
+                touchZ: $0.touchZ
+            )
+        }
+        let treeState = GrowthTreeState(seed: tree.seed, totalBlocks: tree.totalBlocks)
+        return calculateGrowthWithSeasons(
+            tree: treeState,
+            existingBlocks: existingBlocks,
+            since: lastEval,
+            currentDate: currentDate,
+            pendingInteractions: interactionPayloads,
+            blockDates: blockDates,
+            maxElapsedHours: maxElapsedHours
+        )
+    }
+
+    nonisolated static func calculateGrowthWithSeasons(
+        tree: GrowthTreeState,
+        existingBlocks: [VoxelBlockData],
+        since lastEval: Date,
+        currentDate: Date = Date(),
+        pendingInteractions: [InteractionPayload] = [],
         blockDates: [Date?] = [],
         maxElapsedHours: Int = 168
     ) -> GrowthResult {
@@ -56,12 +101,41 @@ enum GrowthEngine {
     }
 
     /// Pure function: takes existing state, returns new blocks to add.
-    static func calculateGrowth(
+    nonisolated static func calculateGrowth(
         tree: BonsaiTree,
         existingBlocks: [VoxelBlockData],
         since lastEval: Date,
         currentDate: Date = Date(),
         pendingInteractions: [Interaction] = [],
+        maxElapsedHours: Int = 168
+    ) -> [VoxelBlockData] {
+        let interactionPayloads = pendingInteractions.map {
+            InteractionPayload(
+                timestamp: $0.timestamp,
+                type: $0.type,
+                value: $0.value,
+                touchX: $0.touchX,
+                touchY: $0.touchY,
+                touchZ: $0.touchZ
+            )
+        }
+        let treeState = GrowthTreeState(seed: tree.seed, totalBlocks: tree.totalBlocks)
+        return calculateGrowth(
+            tree: treeState,
+            existingBlocks: existingBlocks,
+            since: lastEval,
+            currentDate: currentDate,
+            pendingInteractions: interactionPayloads,
+            maxElapsedHours: maxElapsedHours
+        )
+    }
+
+    nonisolated static func calculateGrowth(
+        tree: GrowthTreeState,
+        existingBlocks: [VoxelBlockData],
+        since lastEval: Date,
+        currentDate: Date = Date(),
+        pendingInteractions: [InteractionPayload] = [],
         maxElapsedHours: Int = 168
     ) -> [VoxelBlockData] {
         let elapsed = currentDate.timeIntervalSince(lastEval)
@@ -148,17 +222,17 @@ enum GrowthEngine {
         return newBlocks
     }
 
-    private static func isGrowableTip(_ blockType: BlockType) -> Bool {
+    private nonisolated static func isGrowableTip(_ blockType: BlockType) -> Bool {
         isStructuralBlock(blockType)
     }
 
-    private static func isStructuralBlock(_ blockType: BlockType) -> Bool {
+    private nonisolated static func isStructuralBlock(_ blockType: BlockType) -> Bool {
         blockType == .branch || blockType == .trunk
     }
 
     // MARK: - Growth Rate
 
-    private static func blocksPerTick(
+    private nonisolated static func blocksPerTick(
         season: Season,
         growthStage: TreeBuilder.GrowthStage,
         rng: inout SeededRandom
@@ -188,7 +262,7 @@ enum GrowthEngine {
     // MARK: - Block Growth
 
     // swiftlint:disable:next function_parameter_count
-    private static func growBlock(
+    private nonisolated static func growBlock(
         allBlocks: [VoxelBlockData],
         tipIndices: Set<Int>,
         occupiedPositions: inout Set<PositionKey>,
@@ -196,95 +270,110 @@ enum GrowthEngine {
         growthStage: TreeBuilder.GrowthStage,
         season: Season,
         rng: inout SeededRandom,
-        pendingInteractions: [Interaction]
+        pendingInteractions: [InteractionPayload]
     ) -> (VoxelBlockData, Int)? {
         guard !tipIndices.isEmpty else { return nil }
 
-        let tipArray = prioritizedTipIndices(from: allBlocks, tipIndices: tipIndices)
-        guard !tipArray.isEmpty else { return nil }
+        var remainingTipIndices = prioritizedTipIndices(from: allBlocks, tipIndices: tipIndices)
+        guard !remainingTipIndices.isEmpty else { return nil }
 
         // Weight tips by proximity to touch interactions
         let touchInteraction = pendingInteractions.first { $0.type == .touch && $0.touchX != nil }
-        let selectedTipIndex: Int
-
-        if let touch = touchInteraction, let tx = touch.touchX, let ty = touch.touchY, let tz = touch.touchZ {
-            let weights: [Double] = tipArray.map { i in
-                let block = allBlocks[i]
-                let dx = Double(block.x - tx)
-                let dy = Double(block.y - ty)
-                let dz = Double(block.z - tz)
-                let dist = sqrt(dx * dx + dy * dy + dz * dz)
-                return 1.0 / (dist + 1.0)
-            }
-            selectedTipIndex = weightedSelect(indices: tipArray, weights: weights, rng: &rng)
-        } else {
-            selectedTipIndex = tipArray[Int(rng.next() % UInt64(tipArray.count))]
-        }
-
-        let tip = allBlocks[selectedTipIndex]
         let trunkHeight = max(trunkTopY + VoxelConstants.blockSize, VoxelConstants.blockSize)
         let canopyLimitY = trunkTopY + trunkHeight * 0.8
-        let isHighUp = tip.y >= canopyLimitY
-        let branchDepth = branchDistanceFromTrunk(startingAt: selectedTipIndex, allBlocks: allBlocks)
-        let canGrowFoliage = tip.blockType == .branch && branchDepth >= 2
-        let crowdedNeighborCount = localCrowding(around: tip, occupiedPositions: occupiedPositions)
-        let availableStructuralOpenings = availableStructuralOpeningCount(
-            from: tip,
-            isHighUp: isHighUp,
-            growthStage: growthStage,
-            occupiedPositions: occupiedPositions
-        )
 
-        // Determine block type
-        let blockType = determineBlockType(
-            tip: tip,
-            canGrowFoliage: canGrowFoliage,
-            isHighUp: isHighUp,
-            crowdedNeighborCount: crowdedNeighborCount,
-            availableStructuralOpenings: availableStructuralOpenings,
-            growthStage: growthStage,
-            season: season,
-            rng: &rng
-        )
+        while !remainingTipIndices.isEmpty {
+            let selectedTipIndex: Int
 
-        let direction = growthDirection(
-            from: tip,
-            blockType: blockType,
-            isHighUp: isHighUp,
-            growthStage: growthStage,
-            rng: &rng,
-            pendingInteractions: pendingInteractions
-        )
+            if let touch = touchInteraction, let tx = touch.touchX, let ty = touch.touchY, let tz = touch.touchZ {
+                let weights: [Double] = remainingTipIndices.map { i in
+                    let block = allBlocks[i]
+                    let dx = Double(block.x - tx)
+                    let dy = Double(block.y - ty)
+                    let dz = Double(block.z - tz)
+                    let dist = sqrt(dx * dx + dy * dy + dz * dz)
+                    return 1.0 / (dist + 1.0)
+                }
+                selectedTipIndex = weightedSelect(indices: remainingTipIndices, weights: weights, rng: &rng)
+            } else {
+                selectedTipIndex = remainingTipIndices[Int(rng.next() % UInt64(remainingTipIndices.count))]
+            }
 
-        let newX = tip.x + direction.0
-        let newY = tip.y + direction.1
-        let newZ = tip.z + direction.2
+            let tip = allBlocks[selectedTipIndex]
+            let isHighUp = tip.y >= canopyLimitY
+            let branchDepth = branchDistanceFromTrunk(startingAt: selectedTipIndex, allBlocks: allBlocks)
+            let radialDistance = radialDistanceFromCenter(of: tip)
+            let straightRunLength = straightRunLength(startingAt: selectedTipIndex, allBlocks: allBlocks)
+            let canGrowFoliage = tip.blockType == .branch && branchDepth >= 2
+            let crowdedNeighborCount = localCrowding(around: tip, occupiedPositions: occupiedPositions)
+            let availableStructuralOpenings = availableStructuralOpeningCount(
+                from: tip,
+                isHighUp: isHighUp,
+                growthStage: growthStage,
+                occupiedPositions: occupiedPositions
+            )
 
-        // Avoid overlapping existing blocks
-        guard !occupiedPositions.contains(PositionKey(x: newX, y: newY, z: newZ)) else { return nil }
+            let blockType = determineBlockType(
+                tip: tip,
+                canGrowFoliage: canGrowFoliage,
+                isHighUp: isHighUp,
+                branchDepth: branchDepth,
+                radialDistance: radialDistance,
+                straightRunLength: straightRunLength,
+                crowdedNeighborCount: crowdedNeighborCount,
+                availableStructuralOpenings: availableStructuralOpenings,
+                growthStage: growthStage,
+                season: season,
+                rng: &rng
+            )
 
-        // Don't grow below ground
-        guard newY >= 0 else { return nil }
+            let direction = growthDirection(
+                from: tip,
+                blockType: blockType,
+                isHighUp: isHighUp,
+                branchDepth: branchDepth,
+                radialDistance: radialDistance,
+                straightRunLength: straightRunLength,
+                growthStage: growthStage,
+                rng: &rng,
+                pendingInteractions: pendingInteractions
+            )
 
-        let color = blockColor(for: blockType, season: season, rng: &rng)
+            let newX = tip.x + direction.0
+            let newY = tip.y + direction.1
+            let newZ = tip.z + direction.2
+            let newPosition = PositionKey(x: newX, y: newY, z: newZ)
 
-        let block = VoxelBlockData(
-            x: newX,
-            y: newY,
-            z: newZ,
-            blockType: blockType,
-            colorHex: color,
-            parentIndex: selectedTipIndex
-        )
-        return (block, selectedTipIndex)
+            if newY >= 0, !occupiedPositions.contains(newPosition) {
+                let color = blockColor(for: blockType, season: season, rng: &rng)
+
+                let block = VoxelBlockData(
+                    x: newX,
+                    y: newY,
+                    z: newZ,
+                    blockType: blockType,
+                    colorHex: color,
+                    parentIndex: selectedTipIndex
+                )
+                return (block, selectedTipIndex)
+            }
+
+            remainingTipIndices.removeAll { $0 == selectedTipIndex }
+        }
+
+        return nil
     }
 
     // MARK: - Block Type Determination
 
-    private static func determineBlockType(
+    // swiftlint:disable:next function_parameter_count
+    private nonisolated static func determineBlockType(
         tip: VoxelBlockData,
         canGrowFoliage: Bool,
         isHighUp: Bool,
+        branchDepth: Int,
+        radialDistance: Float,
+        straightRunLength: Int,
         crowdedNeighborCount: Int,
         availableStructuralOpenings: Int,
         growthStage: TreeBuilder.GrowthStage,
@@ -316,6 +405,17 @@ enum GrowthEngine {
         }
 
         if growthStage == .mature {
+            if branchDepth >= 6 {
+                leafThreshold += 10
+            }
+            if radialDistance >= VoxelConstants.blockSize * 5.5 {
+                leafThreshold += 12
+                flowerThreshold = max(0, flowerThreshold - 1)
+            }
+            if straightRunLength >= 3 {
+                leafThreshold += 14
+                flowerThreshold = 0
+            }
             if season == .summer {
                 leafThreshold -= isHighUp ? 16 : 10
                 flowerThreshold = 0
@@ -360,13 +460,17 @@ enum GrowthEngine {
 
     // MARK: - Growth Direction
 
-    private static func growthDirection(
+    // swiftlint:disable:next function_parameter_count
+    private nonisolated static func growthDirection(
         from tip: VoxelBlockData,
         blockType: BlockType,
         isHighUp: Bool,
+        branchDepth: Int,
+        radialDistance: Float,
+        straightRunLength: Int,
         growthStage: TreeBuilder.GrowthStage,
         rng: inout SeededRandom,
-        pendingInteractions: [Interaction]
+        pendingInteractions: [InteractionPayload]
     ) -> (Float, Float, Float) {
         let bs = VoxelConstants.blockSize
         let directions: [(Float, Float, Float)]
@@ -387,7 +491,14 @@ enum GrowthEngine {
                 (bs, -bs, 0), (-bs, -bs, 0),
                 (0, -bs, bs), (0, -bs, -bs)
             ]
-            weights = structuralDirectionWeights(for: growthStage, isHighUp: isHighUp, tip: tip)
+            weights = structuralDirectionWeights(
+                for: growthStage,
+                isHighUp: isHighUp,
+                tip: tip,
+                branchDepth: branchDepth,
+                radialDistance: radialDistance,
+                straightRunLength: straightRunLength
+            )
         }
 
         var adjustedWeights = weights
@@ -416,7 +527,7 @@ enum GrowthEngine {
         return directions[selectedIndex]
     }
 
-    private static func foliageDirectionWeights(for stage: TreeBuilder.GrowthStage) -> [Double] {
+    private nonisolated static func foliageDirectionWeights(for stage: TreeBuilder.GrowthStage) -> [Double] {
         switch stage {
         case .sapling:
             [26.0, 14.0, 14.0, 14.0, 14.0]
@@ -427,12 +538,15 @@ enum GrowthEngine {
         }
     }
 
-    private static func structuralDirectionWeights(
+    private nonisolated static func structuralDirectionWeights(
         for stage: TreeBuilder.GrowthStage,
         isHighUp: Bool,
-        tip: VoxelBlockData
+        tip: VoxelBlockData,
+        branchDepth: Int,
+        radialDistance: Float,
+        straightRunLength: Int
     ) -> [Double] {
-        switch stage {
+        let weights: [Double] = switch stage {
         case .sapling:
             [
                 15.0, 15.0,
@@ -458,9 +572,35 @@ enum GrowthEngine {
                 0.0, 0.0
             ]
         }
+
+        guard stage == .mature else {
+            return weights
+        }
+
+        var adjustedWeights = weights
+        let branchIsExtended = branchDepth >= 6 || radialDistance >= VoxelConstants.blockSize * 5.5
+
+        if branchIsExtended {
+            adjustedWeights[0] = 11.0
+            adjustedWeights[1] = 11.0
+            adjustedWeights[2] = 11.0
+            adjustedWeights[3] = 11.0
+            adjustedWeights[4] = max(adjustedWeights[4], 12.0)
+        }
+
+        if straightRunLength >= 3 {
+            adjustedWeights[0] = 8.0
+            adjustedWeights[1] = 8.0
+            adjustedWeights[2] = 8.0
+            adjustedWeights[3] = 8.0
+            adjustedWeights[4] = max(adjustedWeights[4], 14.0)
+        }
+
+        return adjustedWeights
     }
 
-    private static func prioritizedTipIndices(from allBlocks: [VoxelBlockData], tipIndices: Set<Int>) -> [Int] {
+    private nonisolated static func prioritizedTipIndices(from allBlocks: [VoxelBlockData],
+                                                          tipIndices: Set<Int>) -> [Int] {
         let branchTips = tipIndices.filter { allBlocks[$0].blockType == .branch }
         if !branchTips.isEmpty {
             return Array(branchTips)
@@ -470,7 +610,7 @@ enum GrowthEngine {
         return Array(trunkTips)
     }
 
-    static func branchDistanceFromTrunk(startingAt index: Int, allBlocks: [VoxelBlockData]) -> Int {
+    nonisolated static func branchDistanceFromTrunk(startingAt index: Int, allBlocks: [VoxelBlockData]) -> Int {
         var distance = 0
         var currentIndex: Int? = index
 
@@ -488,7 +628,7 @@ enum GrowthEngine {
         return distance
     }
 
-    private static func localCrowding(
+    private nonisolated static func localCrowding(
         around block: VoxelBlockData,
         occupiedPositions: Set<PositionKey>
     ) -> Int {
@@ -504,7 +644,7 @@ enum GrowthEngine {
         }
     }
 
-    private static func availableStructuralOpeningCount(
+    private nonisolated static func availableStructuralOpeningCount(
         from tip: VoxelBlockData,
         isHighUp: Bool,
         growthStage: TreeBuilder.GrowthStage,
@@ -533,7 +673,14 @@ enum GrowthEngine {
                 return
             }
 
-            let weights = structuralDirectionWeights(for: growthStage, isHighUp: isHighUp, tip: tip)
+            let weights = structuralDirectionWeights(
+                for: growthStage,
+                isHighUp: isHighUp,
+                tip: tip,
+                branchDepth: 0,
+                radialDistance: radialDistanceFromCenter(of: tip),
+                straightRunLength: 0
+            )
             let directionIndex = directions.firstIndex(where: { $0 == direction }) ?? 0
             if weights[directionIndex] > 0 {
                 count += 1
@@ -541,9 +688,56 @@ enum GrowthEngine {
         }
     }
 
+    private nonisolated static func radialDistanceFromCenter(of block: VoxelBlockData) -> Float {
+        sqrt((block.x * block.x) + (block.z * block.z))
+    }
+
+    private nonisolated static func straightRunLength(startingAt index: Int, allBlocks: [VoxelBlockData]) -> Int {
+        guard let parentIndex = allBlocks[index].parentIndex else { return 0 }
+
+        let currentDelta = normalizedStructuralDelta(
+            from: allBlocks[parentIndex],
+            to: allBlocks[index]
+        )
+        guard currentDelta != (0, 0, 0) else { return 0 }
+
+        var runLength = 1
+        var childIndex = parentIndex
+
+        while let grandParentIndex = allBlocks[childIndex].parentIndex {
+            let previousDelta = normalizedStructuralDelta(
+                from: allBlocks[grandParentIndex],
+                to: allBlocks[childIndex]
+            )
+            guard previousDelta == currentDelta else { break }
+            runLength += 1
+            childIndex = grandParentIndex
+        }
+
+        return runLength
+    }
+
+    private nonisolated static func normalizedStructuralDelta(
+        from parent: VoxelBlockData,
+        to child: VoxelBlockData
+    ) -> (Int, Int, Int) {
+        let dx = child.x - parent.x
+        let dy = child.y - parent.y
+        let dz = child.z - parent.z
+        let unit = VoxelConstants.blockSize
+
+        func normalize(_ value: Float) -> Int {
+            if abs(value) < 0.0001 { return 0 }
+            return Int((value / unit).rounded())
+        }
+
+        return (normalize(dx), normalize(dy), normalize(dz))
+    }
+
     // MARK: - Color
 
-    private static func blockColor(for blockType: BlockType, season: Season, rng: inout SeededRandom) -> String {
+    private nonisolated static func blockColor(for blockType: BlockType, season: Season,
+                                               rng: inout SeededRandom) -> String {
         switch blockType {
         case .trunk:
             TreeBuilder.trunkColors[Int(rng.next() % UInt64(TreeBuilder.trunkColors.count))]
