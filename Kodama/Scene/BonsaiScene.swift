@@ -95,13 +95,13 @@ final class BonsaiScene {
         camera.zFar = 100
 
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 3, 7)
+        cameraNode.position = SCNVector3(0, 4, 10)
 
         let lookAtConstraint = SCNLookAtConstraint(target: nil)
         lookAtConstraint.isGimbalLockEnabled = true
 
         let targetNode = SCNNode()
-        targetNode.position = SCNVector3(0, 2, 0)
+        targetNode.position = SCNVector3(0, 2.5, 0)
         scene.rootNode.addChildNode(targetNode)
 
         lookAtConstraint.target = targetNode
@@ -142,15 +142,15 @@ final class BonsaiScene {
 
         // Materials
         let darkMaterial = SCNMaterial()
-        darkMaterial.diffuse.contents = UIColor(red: 60 / 255, green: 44 / 255, blue: 32 / 255, alpha: 1)
+        darkMaterial.diffuse.contents = UIColor(red: 140 / 255, green: 88 / 255, blue: 48 / 255, alpha: 1)
         darkMaterial.roughness.contents = 0.8
 
         let baseMaterial = SCNMaterial()
-        baseMaterial.diffuse.contents = UIColor(red: 74 / 255, green: 55 / 255, blue: 40 / 255, alpha: 1)
+        baseMaterial.diffuse.contents = UIColor(red: 160 / 255, green: 112 / 255, blue: 64 / 255, alpha: 1)
         baseMaterial.roughness.contents = 0.8
 
         let rimMaterial = SCNMaterial()
-        rimMaterial.diffuse.contents = UIColor(red: 88 / 255, green: 66 / 255, blue: 48 / 255, alpha: 1)
+        rimMaterial.diffuse.contents = UIColor(red: 180 / 255, green: 130 / 255, blue: 80 / 255, alpha: 1)
         rimMaterial.roughness.contents = 0.8
 
         let darkGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)

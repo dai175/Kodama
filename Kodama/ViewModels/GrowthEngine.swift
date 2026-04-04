@@ -59,7 +59,7 @@ enum GrowthEngine {
         pendingInteractions: [Interaction] = []
     ) -> [VoxelBlockData] {
         let elapsed = currentDate.timeIntervalSince(lastEval)
-        let elapsedHours = min(Int(elapsed / 3600), 168)
+        let elapsedHours = min(Int(elapsed / 3600), 8760)
 
         guard elapsedHours > 0 else { return [] }
 

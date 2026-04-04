@@ -49,9 +49,22 @@ struct TreeView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView {
-                handleTreeReset()
-            }
+            #if DEBUG
+                SettingsView(
+                    onTreeReset: { handleTreeReset() },
+                    onTimeTravel: { days in
+                        guard let bonsaiRenderer = renderer else { return }
+                        viewModel.timeTravel(days: days, context: modelContext, renderer: bonsaiRenderer)
+                    },
+                    debugTreeInfo: viewModel.currentTree.map {
+                        (totalBlocks: $0.totalBlocks, createdAt: $0.createdAt)
+                    }
+                )
+            #else
+                SettingsView {
+                    handleTreeReset()
+                }
+            #endif
         }
         .onAppear {
             guard isLoading else { return }
@@ -185,7 +198,7 @@ struct SceneViewRepresentable: UIViewRepresentable {
             SCNTransaction.animationDuration = 0.5
 
             scnView.pointOfView = bonsaiScene.cameraNode
-            bonsaiScene.cameraNode.position = SCNVector3(0, 5, 12)
+            bonsaiScene.cameraNode.position = SCNVector3(0, 5, 14)
 
             SCNTransaction.commit()
 
