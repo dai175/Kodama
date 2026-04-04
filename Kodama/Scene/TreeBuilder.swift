@@ -122,13 +122,7 @@ enum TreeBuilder {
         // Branch origin: yIdx 1 (middle of a 2-3 block trunk)
         let originY = blockSize
 
-        var originParentIdx = topIndex
-        for (i, candidate) in blocks.enumerated() {
-            if candidate.overlaps(x: 0, y: originY, z: 0) {
-                originParentIdx = i
-                break
-            }
-        }
+        let originParentIdx = blocks.firstIndex { $0.overlaps(x: 0, y: originY, z: 0) } ?? topIndex
 
         var curX = Float(0)
         var curY = originY
