@@ -49,7 +49,7 @@ enum SeasonalEngine {
     // MARK: - Leaf Color
 
     /// Returns an appropriate leaf color for the given season, optionally blending with a user color.
-    static func leafColor(for season: Season, rng: inout SeededRandom, userColor: String? = nil) -> String {
+    nonisolated static func leafColor(for season: Season, rng: inout SeededRandom, userColor: String? = nil) -> String {
         let baseColor: String = switch season {
         case .spring:
             springLeafColors[Int(rng.next() % UInt64(springLeafColors.count))]
@@ -70,7 +70,7 @@ enum SeasonalEngine {
     // MARK: - Seasonal Effects
 
     /// Applies seasonal effects to existing blocks, returning changes to be applied.
-    static func applySeasonalEffects(
+    nonisolated static func applySeasonalEffects(
         to blocks: [VoxelBlockData],
         season: Season,
         rng: inout SeededRandom,
@@ -99,7 +99,7 @@ enum SeasonalEngine {
     // MARK: - Color Blending
 
     /// Blends two hex colors with a given factor (0 = all base, 1 = all overlay).
-    static func blendColors(base: String, overlay: String, factor: Float) -> String {
+    nonisolated static func blendColors(base: String, overlay: String, factor: Float) -> String {
         let (bR, bG, bB) = hexToRGB(base)
         let (oR, oG, oB) = hexToRGB(overlay)
 
@@ -113,7 +113,7 @@ enum SeasonalEngine {
     // MARK: - Autumn Color Progression
 
     /// Returns the next color in the autumn transition sequence, or nil if already brown.
-    static func autumnColorProgression(currentHex: String) -> String? {
+    nonisolated static func autumnColorProgression(currentHex: String) -> String? {
         let normalized = currentHex.uppercased()
         guard let index = autumnSequence.firstIndex(where: { $0.uppercased() == normalized }) else {
             // If not in sequence, check if it's a leaf-like green and start transitioning
@@ -130,7 +130,7 @@ enum SeasonalEngine {
 
     // MARK: - Private
 
-    private static func applySpringEffects(
+    private nonisolated static func applySpringEffects(
         to blocks: [VoxelBlockData],
         result: inout SeasonalResult
     ) {
@@ -140,7 +140,7 @@ enum SeasonalEngine {
         }
     }
 
-    private static func applySummerEffects(
+    private nonisolated static func applySummerEffects(
         to blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         elapsedDays: Int,
@@ -181,7 +181,7 @@ enum SeasonalEngine {
         }
     }
 
-    private static func applyAutumnEffects(
+    private nonisolated static func applyAutumnEffects(
         to blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         result: inout SeasonalResult,
@@ -191,7 +191,7 @@ enum SeasonalEngine {
         cleanupGroundLeaves(blocks: blocks, blockDates: blockDates, maxDays: 7, result: &result)
     }
 
-    private static func transitionLeafColors(
+    private nonisolated static func transitionLeafColors(
         blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         result: inout SeasonalResult
@@ -219,7 +219,7 @@ enum SeasonalEngine {
         }
     }
 
-    private static func cleanupGroundLeaves(
+    private nonisolated static func cleanupGroundLeaves(
         blocks: [VoxelBlockData],
         blockDates: [Date?],
         maxDays: Int,
@@ -235,7 +235,7 @@ enum SeasonalEngine {
         }
     }
 
-    private static func expireOldFlowers(
+    private nonisolated static func expireOldFlowers(
         blocks: [VoxelBlockData],
         blockDates: [Date?],
         maxDays: Int,
@@ -250,7 +250,7 @@ enum SeasonalEngine {
         }
     }
 
-    private static func applyWinterEffects(
+    private nonisolated static func applyWinterEffects(
         to blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         elapsedDays: Int,
@@ -309,7 +309,7 @@ enum SeasonalEngine {
 
     // MARK: - Hex Color Utilities
 
-    private static func hexToRGB(_ hex: String) -> (Int, Int, Int) {
+    private nonisolated static func hexToRGB(_ hex: String) -> (Int, Int, Int) {
         let hexString = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard hexString.count == 6,
               hexString.allSatisfy(\.isHexDigit),
@@ -324,7 +324,7 @@ enum SeasonalEngine {
         return (r, g, b)
     }
 
-    private static func rgbToHex(r: Int, g: Int, b: Int) -> String {
+    private nonisolated static func rgbToHex(r: Int, g: Int, b: Int) -> String {
         String(format: "#%02X%02X%02X", r, g, b)
     }
 }

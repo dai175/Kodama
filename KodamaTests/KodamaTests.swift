@@ -197,6 +197,58 @@ struct KodamaTests {
         #expect(!structuralGrowth.isEmpty)
         #expect(structuralGrowth.count >= foliageGrowth.count / 2)
     }
+
+    @Test func matureLongGrowthKeepsBranchesWithinCanopyReach() {
+        let start = makeDate(year: 2026, month: 4, day: 1)
+        let end = makeDate(year: 2026, month: 8, day: 1)
+        let tree = BonsaiTree(seed: 222)
+        let blocks = makeMatureTree()
+        tree.totalBlocks = blocks.count
+
+        let newBlocks = GrowthEngine.calculateGrowth(
+            tree: tree,
+            existingBlocks: blocks,
+            since: start,
+            currentDate: end,
+            maxElapsedHours: 24 * 122
+        )
+
+        let combined = blocks + newBlocks
+        let structuralReach = maxRadialSpread(
+            of: combined.filter { $0.blockType == .branch || $0.blockType == .trunk }
+        )
+        let foliageReach = maxRadialSpread(
+            of: combined.filter { $0.blockType == .leaf || $0.blockType == .flower }
+        )
+
+        #expect(!newBlocks.isEmpty)
+        #expect(foliageReach > 0)
+        #expect(structuralReach <= foliageReach + (VoxelConstants.blockSize * 3))
+    }
+
+    @Test func growthFallsBackToAnotherTipWhenPreferredTipIsBlocked() {
+        let start = makeDate(year: 2026, month: 4, day: 1)
+        let end = makeDate(year: 2026, month: 4, day: 10)
+        let tree = BonsaiTree(seed: 333)
+        let blocks = makeTreeWithBlockedAndOpenTips()
+        tree.totalBlocks = blocks.count
+
+        let newBlocks = GrowthEngine.calculateGrowth(
+            tree: tree,
+            existingBlocks: blocks,
+            since: start,
+            currentDate: end,
+            maxElapsedHours: 24 * 9
+        )
+
+        #expect(!newBlocks.isEmpty)
+        #expect(
+            newBlocks.contains { block in
+                guard let parentIndex = block.parentIndex else { return false }
+                return parentIndex == 7
+            }
+        )
+    }
 }
 
 private func makeDate(year: Int, month: Int, day: Int) -> Date {
@@ -295,6 +347,25 @@ private func makeMatureTree() -> [VoxelBlockData] {
     return blocks
 }
 
+private func makeTreeWithBlockedAndOpenTips() -> [VoxelBlockData] {
+    let bs = VoxelConstants.blockSize
+    return [
+        VoxelBlockData(x: 0, y: 0, z: 0, blockType: .trunk, colorHex: "#4A3520", parentIndex: nil),
+        VoxelBlockData(x: 0, y: bs, z: 0, blockType: .trunk, colorHex: "#4A3520", parentIndex: 0),
+        VoxelBlockData(x: 0, y: bs * 2, z: 0, blockType: .trunk, colorHex: "#4A3520", parentIndex: 1),
+        VoxelBlockData(x: bs, y: bs * 2, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: 2),
+        VoxelBlockData(x: bs * 2, y: bs * 2, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: 3),
+        VoxelBlockData(x: bs * 3, y: bs * 2, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: 4),
+        VoxelBlockData(x: bs * 3, y: bs * 3, z: 0, blockType: .leaf, colorHex: "#7AB648", parentIndex: 5),
+        VoxelBlockData(x: -bs, y: bs * 2, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: 2),
+        VoxelBlockData(x: bs * 4, y: bs * 2, z: 0, blockType: .leaf, colorHex: "#7AB648", parentIndex: 5),
+        VoxelBlockData(x: bs * 3, y: bs * 2, z: bs, blockType: .leaf, colorHex: "#7AB648", parentIndex: 5),
+        VoxelBlockData(x: bs * 3, y: bs * 2, z: -bs, blockType: .leaf, colorHex: "#7AB648", parentIndex: 5),
+        VoxelBlockData(x: bs * 3, y: bs, z: bs, blockType: .branch, colorHex: "#5A4530", parentIndex: 5),
+        VoxelBlockData(x: bs * 3, y: bs, z: -bs, blockType: .branch, colorHex: "#5A4530", parentIndex: 5)
+    ]
+}
+
 private func isFaceAdjacent(_ vector: (Float, Float, Float)) -> Bool {
     let unit = VoxelConstants.blockSize
     let components = [abs(vector.0), abs(vector.1), abs(vector.2)]
@@ -311,4 +382,10 @@ private func averageRadialSpread(of blocks: [VoxelBlockData]) -> Float {
         partialResult + abs(block.x) + abs(block.z)
     }
     return total / Float(foliage.count)
+}
+
+private func maxRadialSpread(of blocks: [VoxelBlockData]) -> Float {
+    blocks.reduce(Float.zero) { partialResult, block in
+        max(partialResult, sqrt((block.x * block.x) + (block.z * block.z)))
+    }
 }

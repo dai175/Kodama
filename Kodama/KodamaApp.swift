@@ -18,9 +18,15 @@ struct KodamaApp: App {
             VoxelBlock.self,
             Interaction.self
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
+            let appSupportURL = try persistentStoreDirectory()
+            let storeURL = appSupportURL.appendingPathComponent("default.store")
+            let modelConfiguration = ModelConfiguration(
+                "default",
+                schema: schema,
+                url: storeURL
+            )
             return try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
@@ -33,5 +39,19 @@ struct KodamaApp: App {
                 .environment(appState)
         }
         .modelContainer(sharedModelContainer)
+    }
+
+    private static func persistentStoreDirectory() throws -> URL {
+        let appSupportURL = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        try FileManager.default.createDirectory(
+            at: appSupportURL,
+            withIntermediateDirectories: true
+        )
+        return appSupportURL
     }
 }

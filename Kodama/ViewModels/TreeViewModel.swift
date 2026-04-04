@@ -121,7 +121,7 @@ final class TreeViewModel {
         force: Bool = false,
         currentDate: Date = Date(),
         maxElapsedHours: Int = 168
-    ) {
+    ) async {
         guard let tree = currentTree else { return }
         guard force || currentDate.timeIntervalSince(tree.lastGrowthEval) >= 60 else { return }
 
@@ -139,16 +139,31 @@ final class TreeViewModel {
             uniquingKeysWith: { first, _ in first }
         )
         let blockDates: [Date?] = blocks.map { treeBlockLookup[$0.positionKey]?.placedAt }
+        let interactionPayloads = pendingInteractions.map {
+            InteractionPayload(
+                timestamp: $0.timestamp,
+                type: $0.type,
+                value: $0.value,
+                touchX: $0.touchX,
+                touchY: $0.touchY,
+                touchZ: $0.touchZ
+            )
+        }
+        let treeState = GrowthTreeState(seed: tree.seed, totalBlocks: tree.totalBlocks)
+        let existingBlocks = blocks
+        let lastGrowthEval = tree.lastGrowthEval
 
-        let growthResult = GrowthEngine.calculateGrowthWithSeasons(
-            tree: tree,
-            existingBlocks: blocks,
-            since: tree.lastGrowthEval,
-            currentDate: currentDate,
-            pendingInteractions: pendingInteractions,
-            blockDates: blockDates,
-            maxElapsedHours: maxElapsedHours
-        )
+        let growthResult = await Task.detached(priority: .userInitiated) {
+            GrowthEngine.calculateGrowthWithSeasons(
+                tree: treeState,
+                existingBlocks: existingBlocks,
+                since: lastGrowthEval,
+                currentDate: currentDate,
+                pendingInteractions: interactionPayloads,
+                blockDates: blockDates,
+                maxElapsedHours: maxElapsedHours
+            )
+        }.value
 
         let seasonal = growthResult.seasonalEffects
         guard hasSeasonalChanges(newBlocks: growthResult.newBlocks, seasonal: seasonal) else {
@@ -296,29 +311,60 @@ final class TreeViewModel {
             value: Int,
             context: ModelContext,
             renderer: BonsaiRenderer
-        ) {
-            guard let tree = currentTree else {
+        ) async {
+            guard currentTree != nil else {
                 print("[TimeTravel] ABORT: currentTree is nil")
                 return
             }
-            let blocksBefore = blocks.count
             let savedOverride = Season.debugOverride
             defer { Season.debugOverride = savedOverride }
             Season.debugOverride = nil
-            let targetDate = Calendar.current.date(
-                byAdding: component,
-                value: value,
-                to: tree.lastGrowthEval
-            ) ?? tree.lastGrowthEval
-            print("[TimeTravel] Advancing growth evaluation by \(value) \(component) to \(targetDate)")
-            evaluateGrowth(
-                context: context,
-                renderer: renderer,
-                force: true,
-                currentDate: targetDate,
-                maxElapsedHours: 8760
-            )
-            print("[TimeTravel] Blocks: \(blocksBefore) → \(blocks.count)")
+            var remainingValue = value
+
+            while remainingValue > 0, let currentTree {
+                let stepValue = min(timeTravelStepSize(for: component), remainingValue)
+                let blocksBefore = blocks.count
+                let targetDate = Calendar.current.date(
+                    byAdding: component,
+                    value: stepValue,
+                    to: currentTree.lastGrowthEval
+                ) ?? currentTree.lastGrowthEval
+
+                print("[TimeTravel] Advancing growth evaluation by \(stepValue) \(component) to \(targetDate)")
+                await evaluateGrowth(
+                    context: context,
+                    renderer: renderer,
+                    force: true,
+                    currentDate: targetDate,
+                    maxElapsedHours: maxElapsedHours(for: component, stepValue: stepValue)
+                )
+                print("[TimeTravel] Blocks: \(blocksBefore) → \(blocks.count)")
+
+                remainingValue -= stepValue
+                await Task.yield()
+            }
+        }
+
+        private func timeTravelStepSize(for component: Calendar.Component) -> Int {
+            switch component {
+            case .month:
+                1
+            case .day:
+                7
+            default:
+                1
+            }
+        }
+
+        private func maxElapsedHours(for component: Calendar.Component, stepValue: Int) -> Int {
+            switch component {
+            case .month:
+                24 * 31 * max(1, stepValue)
+            case .day:
+                24 * max(1, stepValue)
+            default:
+                24 * 31
+            }
         }
     #endif
 
