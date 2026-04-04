@@ -10,6 +10,23 @@ import Foundation
 import Testing
 
 struct KodamaTests {
+    @Test func saplingGenerationProducesDenserNonOverlappingSeedlings() {
+        for seed in 1 ... 8 {
+            let blocks = TreeBuilder.buildSapling(seed: UInt64(seed))
+            let trunkBlocks = blocks.filter { $0.blockType == .trunk }
+            let branchBlocks = blocks.filter { $0.blockType == .branch }
+            let foliageBlocks = blocks.filter { $0.blockType == .leaf || $0.blockType == .flower }
+            let branchParentIndices = Set(branchBlocks.compactMap(\.parentIndex))
+            let foliageParentIndices = Set(foliageBlocks.compactMap(\.parentIndex))
+
+            #expect((4 ... 5).contains(trunkBlocks.count))
+            #expect(branchBlocks.count >= 6)
+            #expect(foliageBlocks.count >= 10)
+            #expect(Set(blocks.map(\.positionKey)).count == blocks.count)
+            #expect(foliageParentIndices.intersection(branchParentIndices).count >= 2)
+        }
+    }
+
     @Test func springGrowthRemainsSlowOverOneDay() {
         let start = makeDate(year: 2026, month: 4, day: 1)
         let end = makeDate(year: 2026, month: 4, day: 2)
@@ -107,4 +124,3 @@ private func makeBranchingTree() -> [VoxelBlockData] {
         VoxelBlockData(x: bs * 2, y: bs, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: 3)
     ]
 }
-

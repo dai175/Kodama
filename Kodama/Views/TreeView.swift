@@ -210,7 +210,7 @@ struct SceneViewRepresentable: UIViewRepresentable {
             SCNTransaction.animationDuration = 0.5
 
             scnView.pointOfView = bonsaiScene.cameraNode
-            bonsaiScene.cameraNode.position = SCNVector3(0, 5, 14)
+            bonsaiScene.cameraNode.position = bonsaiScene.defaultCameraPosition
 
             SCNTransaction.commit()
 

@@ -78,111 +78,216 @@ enum TreeBuilder {
     static func buildSapling(seed: UInt64) -> [VoxelBlockData] {
         var rng = SeededRandom(seed: seed)
         var blocks: [VoxelBlockData] = []
+        var occupiedPositions: Set<PositionKey> = []
 
-        let topCenterIndex = buildTrunk(blocks: &blocks, rng: &rng)
-        buildBranches(blocks: &blocks, rng: &rng, topIndex: topCenterIndex)
-        buildCrownLeaf(blocks: &blocks, rng: &rng, topIndex: topCenterIndex)
+        let topCenterIndex = buildTrunk(
+            blocks: &blocks,
+            occupiedPositions: &occupiedPositions,
+            rng: &rng
+        )
+        buildBranches(
+            blocks: &blocks,
+            occupiedPositions: &occupiedPositions,
+            rng: &rng,
+            topIndex: topCenterIndex
+        )
+        buildCrownLeaf(
+            blocks: &blocks,
+            occupiedPositions: &occupiedPositions,
+            rng: &rng,
+            topIndex: topCenterIndex
+        )
 
         return blocks
     }
 
     @discardableResult
-    private static func buildTrunk(blocks: inout [VoxelBlockData], rng: inout SeededRandom) -> Int {
+    private static func buildTrunk(
+        blocks: inout [VoxelBlockData],
+        occupiedPositions: inout Set<PositionKey>,
+        rng: inout SeededRandom
+    ) -> Int {
         let blockSize = VoxelConstants.blockSize
-        let height = 2 + Int(rng.next() % 2) // 2-3 blocks tall
+        let height = 4 + Int(rng.next() % 2) // 4-5 blocks tall
+        let bendDirection: (Float, Float) = {
+            let directions: [(Float, Float)] = [
+                (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
+            ]
+            return directions[Int(rng.next() % UInt64(directions.count))]
+        }()
+        let bendStart = 2 + Int(rng.next() % 2)
+
+        var currentX: Float = 0
+        var currentZ: Float = 0
 
         for yIdx in 0 ..< height {
             let parentIdx = yIdx > 0 ? blocks.count - 1 : nil
+            if yIdx >= bendStart {
+                currentX += bendDirection.0
+                currentZ += bendDirection.1
+            }
             let color = trunkColors[Int(rng.next() % UInt64(trunkColors.count))]
-            blocks.append(VoxelBlockData(
-                x: 0,
+            let block = VoxelBlockData(
+                x: currentX,
                 y: Float(yIdx) * blockSize,
-                z: 0,
+                z: currentZ,
                 blockType: .trunk,
                 colorHex: color,
                 parentIndex: parentIdx
-            ))
+            )
+            blocks.append(block)
+            occupiedPositions.insert(block.positionKey)
         }
 
         return blocks.count - 1
     }
 
-    private static func buildBranches(blocks: inout [VoxelBlockData], rng: inout SeededRandom, topIndex: Int) {
-        // 50% chance of a single short branch
-        guard rng.next() % 2 == 0 else { return }
-
-        let blockSize = VoxelConstants.blockSize
-        let directions: [(Float, Float)] = [
-            (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
-        ]
-        let dir = directions[Int(rng.next() % UInt64(directions.count))]
-        let branchColor = branchColors[Int(rng.next() % UInt64(branchColors.count))]
-        let branchLength = 1 + Int(rng.next() % 2) // 1-2 blocks
-
-        // Branch origin: yIdx 1 (middle of a 2-3 block trunk)
-        let originY = blockSize
-
-        let originParentIdx = blocks.firstIndex { $0.overlaps(x: 0, y: originY, z: 0) } ?? topIndex
-
-        var curX = Float(0)
-        var curY = originY
-        var curZ = Float(0)
-        var prevIdx = originParentIdx
-
-        for step in 0 ..< branchLength {
-            curX += dir.0
-            curZ += dir.1
-            // Second block curves upward
-            if step == 1 {
-                curY += blockSize
-            }
-
-            let stepIdx = blocks.count
-            blocks.append(VoxelBlockData(
-                x: curX,
-                y: curY,
-                z: curZ,
-                blockType: .branch,
-                colorHex: branchColor,
-                parentIndex: prevIdx
-            ))
-            prevIdx = stepIdx
-        }
-
-        buildBranchLeaves(blocks: &blocks, rng: &rng, topIndex: prevIdx)
-    }
-
-    private static func buildBranchLeaves(
+    private static func buildBranches(
         blocks: inout [VoxelBlockData],
+        occupiedPositions: inout Set<PositionKey>,
         rng: inout SeededRandom,
         topIndex: Int
     ) {
         let blockSize = VoxelConstants.blockSize
-        let tipY = blocks[topIndex].y
-        let tipX = blocks[topIndex].x
-        let tipZ = blocks[topIndex].z
+        let directions: [(Float, Float)] = [
+            (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
+        ]
 
-        let leafColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
-        blocks.append(VoxelBlockData(
-            x: tipX,
-            y: tipY + blockSize,
-            z: tipZ,
-            blockType: .leaf,
-            colorHex: leafColor,
-            parentIndex: topIndex
-        ))
+        var availableDirections = directions
+        let branchCount = min(2 + Int(rng.next() % 2), availableDirections.count)
+
+        for branchIndex in 0 ..< branchCount {
+            let directionIndex = Int(rng.next() % UInt64(availableDirections.count))
+            let dir = availableDirections.remove(at: directionIndex)
+            let branchColor = branchColors[Int(rng.next() % UInt64(branchColors.count))]
+            let branchLength = 3 + Int(rng.next() % 2)
+            let trunkLevel = max(1, min(topIndex - branchIndex, topIndex))
+            let originParentIdx = trunkLevel
+
+            var curX = blocks[originParentIdx].x
+            var curY = blocks[originParentIdx].y
+            var curZ = blocks[originParentIdx].z
+            var prevIdx = originParentIdx
+
+            for step in 0 ..< branchLength {
+                curX += dir.0
+                curZ += dir.1
+                if step > 0 {
+                    curY += blockSize
+                }
+
+                let block = VoxelBlockData(
+                    x: curX,
+                    y: curY,
+                    z: curZ,
+                    blockType: .branch,
+                    colorHex: branchColor,
+                    parentIndex: prevIdx
+                )
+                guard insert(block, into: &blocks, occupiedPositions: &occupiedPositions) else { continue }
+                prevIdx = blocks.count - 1
+
+                if step >= 1 {
+                    addIntermediateFoliage(
+                        around: prevIdx,
+                        blocks: &blocks,
+                        occupiedPositions: &occupiedPositions,
+                        rng: &rng,
+                        upwardBias: step == branchLength - 1
+                    )
+                }
+            }
+
+            buildBranchLeaves(
+                blocks: &blocks,
+                occupiedPositions: &occupiedPositions,
+                rng: &rng,
+                topIndex: prevIdx
+            )
+        }
     }
 
-    private static func buildCrownLeaf(blocks: inout [VoxelBlockData], rng: inout SeededRandom, topIndex: Int) {
-        let crownColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
-        blocks.append(VoxelBlockData(
-            x: 0,
-            y: blocks[topIndex].y + VoxelConstants.blockSize,
-            z: 0,
-            blockType: .leaf,
-            colorHex: crownColor,
-            parentIndex: topIndex
-        ))
+    private static func buildBranchLeaves(
+        blocks: inout [VoxelBlockData],
+        occupiedPositions: inout Set<PositionKey>,
+        rng: inout SeededRandom,
+        topIndex: Int
+    ) {
+        addIntermediateFoliage(
+            around: topIndex,
+            blocks: &blocks,
+            occupiedPositions: &occupiedPositions,
+            rng: &rng,
+            upwardBias: true
+        )
+    }
+
+    private static func addIntermediateFoliage(
+        around index: Int,
+        blocks: inout [VoxelBlockData],
+        occupiedPositions: inout Set<PositionKey>,
+        rng: inout SeededRandom,
+        upwardBias: Bool
+    ) {
+        let blockSize = VoxelConstants.blockSize
+        let anchor = blocks[index]
+
+        var candidateOffsets: [(Float, Float, Float)] = [
+            (0, blockSize, 0),
+            (blockSize, blockSize, 0),
+            (-blockSize, blockSize, 0),
+            (0, blockSize, blockSize),
+            (0, blockSize, -blockSize),
+            (blockSize, 0, 0),
+            (-blockSize, 0, 0),
+            (0, 0, blockSize),
+            (0, 0, -blockSize)
+        ]
+        if upwardBias {
+            candidateOffsets.append(contentsOf: [
+                (blockSize, blockSize, blockSize),
+                (-blockSize, blockSize, -blockSize)
+            ])
+        }
+        let clusterSize = upwardBias ? 4 + Int(rng.next() % 3) : 2 + Int(rng.next() % 2)
+
+        for offset in candidateOffsets.shuffled(using: &rng).prefix(clusterSize) {
+            let leafColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
+            let block = VoxelBlockData(
+                x: anchor.x + offset.0,
+                y: anchor.y + offset.1,
+                z: anchor.z + offset.2,
+                blockType: .leaf,
+                colorHex: leafColor,
+                parentIndex: index
+            )
+            _ = insert(block, into: &blocks, occupiedPositions: &occupiedPositions)
+        }
+    }
+
+    private static func buildCrownLeaf(
+        blocks: inout [VoxelBlockData],
+        occupiedPositions: inout Set<PositionKey>,
+        rng: inout SeededRandom,
+        topIndex: Int
+    ) {
+        buildBranchLeaves(
+            blocks: &blocks,
+            occupiedPositions: &occupiedPositions,
+            rng: &rng,
+            topIndex: topIndex
+        )
+    }
+
+    private static func insert(
+        _ block: VoxelBlockData,
+        into blocks: inout [VoxelBlockData],
+        occupiedPositions: inout Set<PositionKey>
+    ) -> Bool {
+        guard !occupiedPositions.contains(block.positionKey) else { return false }
+        blocks.append(block)
+        occupiedPositions.insert(block.positionKey)
+        return true
     }
 
     // MARK: - SCNNode Construction
