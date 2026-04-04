@@ -16,9 +16,9 @@ final class Interaction {
     var timestamp: Date
     var typeRaw: String
     var value: String?
-    var touchX: Float?
-    var touchY: Float?
-    var touchZ: Float?
+    var touchX: Int?
+    var touchY: Int?
+    var touchZ: Int?
     var tree: BonsaiTree?
 
     var type: InteractionType {
@@ -37,9 +37,9 @@ final class Interaction {
     init(
         type: InteractionType,
         value: String? = nil,
-        touchX: Float? = nil,
-        touchY: Float? = nil,
-        touchZ: Float? = nil
+        touchX: Int? = nil,
+        touchY: Int? = nil,
+        touchZ: Int? = nil
     ) {
         id = UUID()
         timestamp = Date()

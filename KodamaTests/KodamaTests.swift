@@ -9,6 +9,14 @@ import Testing
 @testable import Kodama
 
 struct KodamaTests {
+    @Test func interactionTouchCoordinatesUseIntegers() {
+        let interaction = Interaction(type: .touch, touchX: 2, touchY: -1, touchZ: 5)
+
+        #expect(interaction.touchX == 2)
+        #expect(interaction.touchY == -1)
+        #expect(interaction.touchZ == 5)
+    }
+
     @Test func growthLongRunDoesNotStallAndRespectsUpperBound() {
         let tree = BonsaiTree(seed: 42)
         let initial = TreeBuilder.buildSapling(seed: 42)

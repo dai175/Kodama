@@ -21,9 +21,9 @@ nonisolated struct InteractionPayload {
     let timestamp: Date
     let type: InteractionType
     let value: String?
-    let touchX: Float?
-    let touchY: Float?
-    let touchZ: Float?
+    let touchX: Int?
+    let touchY: Int?
+    let touchZ: Int?
 }
 
 // MARK: - GrowthEngine
@@ -519,7 +519,7 @@ nonisolated enum GrowthEngine {
               let z = interaction.touchZ
         else { return nil }
 
-        return Int3(x: Int(x.rounded()), y: Int(y.rounded()), z: Int(z.rounded()))
+        return Int3(x: x, y: y, z: z)
     }
 
     private nonisolated static func shuffledDirections<T>(_ values: [T], rng: inout SeededRandom) -> [T] {
