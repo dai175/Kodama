@@ -46,7 +46,7 @@ The name comes from 木霊 (*kodama*) — the Japanese concept of spirits that i
 xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' build
 
 # Test
-xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' test
+xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:KodamaTests test
 
 # Lint
 swiftlint
@@ -54,6 +54,8 @@ swiftlint
 # Format
 swiftformat .
 ```
+
+During the current prototyping phase, the default test command runs internal logic tests only (`KodamaTests`). Run `KodamaUITests` separately only when UI verification is explicitly needed.
 
 ## Project Structure
 

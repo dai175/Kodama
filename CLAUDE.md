@@ -17,7 +17,8 @@ Voxel bonsai tree iOS app. Tree grows autonomously over real-world time with use
 xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' build
 
 # Test
-xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' test
+# During prototyping, run internal logic tests only by default.
+xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:KodamaTests test
 
 # Lint
 swiftlint
@@ -58,3 +59,4 @@ swiftformat .
 - Growth is calculated, not real-time — catch-up on app open
 - Dark theme only, no pure white/black colors
 - SwiftFormat uses `--swiftversion 6.1` (separate from pbxproj `SWIFT_VERSION = 5.0` — to be unified later)
+- During prototyping, default to `KodamaTests` only; run `KodamaUITests` only on explicit request
