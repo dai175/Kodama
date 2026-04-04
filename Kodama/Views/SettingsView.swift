@@ -172,6 +172,7 @@ struct SettingsView: View {
                 ], id: \.days) { item in
                     Button {
                         onTimeTravel?(item.days)
+                        dismiss()
                     } label: {
                         Text(item.label)
                             .foregroundStyle(Color.softWhite.opacity(0.8))

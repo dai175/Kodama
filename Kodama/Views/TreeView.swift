@@ -53,7 +53,10 @@ struct TreeView: View {
                 SettingsView(
                     onTreeReset: handleTreeReset,
                     onTimeTravel: { days in
-                        guard let bonsaiRenderer = renderer else { return }
+                        guard let bonsaiRenderer = renderer else {
+                            print("[TimeTravel] ABORT: renderer is nil")
+                            return
+                        }
                         viewModel.timeTravel(days: days, context: modelContext, renderer: bonsaiRenderer)
                     },
                     debugTreeInfo: viewModel.currentTree.map {
