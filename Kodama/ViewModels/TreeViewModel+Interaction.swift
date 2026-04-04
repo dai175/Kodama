@@ -1,0 +1,58 @@
+//
+//  TreeViewModel+Interaction.swift
+//  Kodama
+//
+
+import Foundation
+import SceneKit
+import SwiftData
+
+// MARK: - User Interaction
+
+@MainActor extension TreeViewModel {
+    func handleTouch(position: SCNVector3, context: ModelContext) {
+        guard let tree = currentTree else { return }
+        let logicalTouch = Int3(
+            x: Int((position.x / VoxelConstants.renderScale).rounded()),
+            y: Int((position.y / VoxelConstants.renderScale).rounded()),
+            z: Int((position.z / VoxelConstants.renderScale).rounded())
+        )
+        let interaction = Interaction(
+            type: .touch,
+            touchX: logicalTouch.x,
+            touchY: logicalTouch.y,
+            touchZ: logicalTouch.z
+        )
+        interaction.tree = tree
+        context.insert(interaction)
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save touch interaction: \(error)")
+        }
+    }
+
+    func handleColor(hex: String, context: ModelContext) {
+        guard let tree = currentTree else { return }
+        let interaction = Interaction(type: .color, value: hex)
+        interaction.tree = tree
+        context.insert(interaction)
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save color interaction: \(error)")
+        }
+    }
+
+    func handleWord(text: String, context: ModelContext) {
+        guard let tree = currentTree else { return }
+        let interaction = Interaction(type: .word, value: text)
+        interaction.tree = tree
+        context.insert(interaction)
+        do {
+            try context.save()
+        } catch {
+            print("Failed to save word interaction: \(error)")
+        }
+    }
+}
