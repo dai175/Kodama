@@ -29,6 +29,54 @@ nonisolated struct VoxelBlockData {
     }
 }
 
+// MARK: - Stage Profiles
+
+extension TreeBuilder {
+    nonisolated static func stageProfile(for stage: GrowthStage) -> StageProfile {
+        switch stage {
+        case .sapling:
+            StageProfile(
+                branchCountRange: 2 ... 2,
+                branchLengthRange: 5 ... 6,
+                branchStartHeightBias: 0,
+                intermediateFoliageDensity: .barelyThere,
+                terminalFoliageDensity: .sparse,
+                crownDensity: .sparse,
+                prefersOuterCanopy: false,
+                secondaryBranchChance: 0,
+                canopyOpenSlots: 0,
+                canopyLiftChance: 0
+            )
+        case .young:
+            StageProfile(
+                branchCountRange: 2 ... 3,
+                branchLengthRange: 5 ... 7,
+                branchStartHeightBias: 1,
+                intermediateFoliageDensity: .sparse,
+                terminalFoliageDensity: .medium,
+                crownDensity: .medium,
+                prefersOuterCanopy: false,
+                secondaryBranchChance: 3,
+                canopyOpenSlots: 0,
+                canopyLiftChance: 7
+            )
+        case .mature:
+            StageProfile(
+                branchCountRange: 3 ... 3,
+                branchLengthRange: 6 ... 8,
+                branchStartHeightBias: 1,
+                intermediateFoliageDensity: .medium,
+                terminalFoliageDensity: .lush,
+                crownDensity: .medium,
+                prefersOuterCanopy: true,
+                secondaryBranchChance: 2,
+                canopyOpenSlots: 1,
+                canopyLiftChance: 5
+            )
+        }
+    }
+}
+
 // MARK: - SeededRandom
 
 nonisolated struct SeededRandom: RandomNumberGenerator {
@@ -49,35 +97,5 @@ nonisolated struct SeededRandom: RandomNumberGenerator {
 
     init(seed: UInt64) {
         state = seed == 0 ? 1 : seed
-    }
-}
-
-// MARK: - TreeBuilder Supporting Types
-
-extension TreeBuilder {
-    struct BuildContext {
-        var blocks: [VoxelBlockData]
-        var occupiedPositions: Set<Int3>
-        var rng: SeededRandom
-    }
-
-    enum FoliageDensity {
-        case barelyThere
-        case sparse
-        case medium
-        case lush
-    }
-
-    struct StageProfile {
-        let branchCountRange: ClosedRange<Int>
-        let branchLengthRange: ClosedRange<Int>
-        let branchStartHeightBias: Int
-        let intermediateFoliageDensity: FoliageDensity
-        let terminalFoliageDensity: FoliageDensity
-        let crownDensity: FoliageDensity
-        let prefersOuterCanopy: Bool
-        let secondaryBranchChance: UInt64
-        let canopyOpenSlots: Int
-        let canopyLiftChance: UInt64
     }
 }
