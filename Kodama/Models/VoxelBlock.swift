@@ -13,9 +13,9 @@ final class VoxelBlock {
     // MARK: Internal
 
     var id: UUID
-    var x: Float
-    var y: Float
-    var z: Float
+    var ix: Int
+    var iy: Int
+    var iz: Int
     var blockTypeRaw: String
     var colorHex: String
     var placedAt: Date
@@ -34,8 +34,8 @@ final class VoxelBlock {
         set { blockTypeRaw = newValue.rawValue }
     }
 
-    var positionKey: PositionKey {
-        PositionKey(x: x, y: y, z: z)
+    var pos: Int3 {
+        Int3(x: ix, y: iy, z: iz)
     }
 
     var source: GrowthSource {
@@ -52,18 +52,17 @@ final class VoxelBlock {
     // MARK: - Initialization
 
     init(
-        x: Float,
-        y: Float,
-        z: Float,
+        id: UUID = UUID(),
+        pos: Int3,
         blockType: BlockType,
         colorHex: String,
         source: GrowthSource,
         parentBlockID: UUID? = nil
     ) {
-        id = UUID()
-        self.x = x
-        self.y = y
-        self.z = z
+        self.id = id
+        ix = pos.x
+        iy = pos.y
+        iz = pos.z
         blockTypeRaw = blockType.rawValue
         self.colorHex = colorHex
         placedAt = Date()

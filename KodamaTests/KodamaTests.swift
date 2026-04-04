@@ -77,9 +77,9 @@ struct KodamaTests {
         let all = initial + newBlocks
 
         for (index, block) in all.enumerated() {
-            guard let parentIndex = block.parentIndex else { continue }
-            #expect(parentIndex >= 0)
-            #expect(parentIndex < all.count)
+            guard let parentID = block.parentID else { continue }
+            let parentIndex = all.firstIndex(where: { $0.id == parentID })
+            #expect(parentIndex != nil)
             #expect(parentIndex != index)
 
             var visited = Set<Int>()
@@ -90,7 +90,11 @@ struct KodamaTests {
                 #expect(c < all.count)
                 #expect(!visited.contains(c))
                 visited.insert(c)
-                cursor = all[c].parentIndex
+                if let nextParentID = all[c].parentID {
+                    cursor = all.firstIndex(where: { $0.id == nextParentID })
+                } else {
+                    cursor = nil
+                }
                 hops += 1
                 #expect(hops <= all.count)
             }
@@ -121,15 +125,15 @@ struct KodamaTests {
 
     @Test func rendererAppliesRenderScaleOnlyAtSceneBuildTime() throws {
         let blocks = [
-            VoxelBlockData(x: 2, y: 4, z: -3, blockType: .trunk, colorHex: "#4A3520", parentIndex: nil)
+            VoxelBlockData(pos: Int3(x: 2, y: 4, z: -3), blockType: .trunk, colorHex: "#4A3520", parentID: nil)
         ]
 
         let root = TreeBuilder.buildSCNNodes(from: blocks)
         let node = try #require(root.childNodes.first)
 
-        #expect(node.position.x == blocks[0].x * VoxelConstants.renderScale)
-        #expect(node.position.y == blocks[0].y * VoxelConstants.renderScale)
-        #expect(node.position.z == blocks[0].z * VoxelConstants.renderScale)
+        #expect(node.position.x == Float(blocks[0].pos.x) * VoxelConstants.renderScale)
+        #expect(node.position.y == Float(blocks[0].pos.y) * VoxelConstants.renderScale)
+        #expect(node.position.z == Float(blocks[0].pos.z) * VoxelConstants.renderScale)
     }
 }
 

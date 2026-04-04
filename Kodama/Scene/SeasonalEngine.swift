@@ -7,7 +7,7 @@ import Foundation
 
 // MARK: - SeasonalResult
 
-struct SeasonalResult {
+nonisolated struct SeasonalResult {
     var colorChanges: [(blockIndex: Int, newColor: String)]
     var fallenLeaves: Set<Int>
     var newSnowBlocks: [VoxelBlockData]
@@ -27,7 +27,7 @@ struct SeasonalResult {
 
 // MARK: - SeasonalEngine
 
-enum SeasonalEngine {
+nonisolated enum SeasonalEngine {
     // MARK: - Color Palettes
 
     static let springLeafColors = ["#7AB648", "#5A9E3A", "#8BC96A"]
@@ -149,7 +149,7 @@ enum SeasonalEngine {
         // Add moss on trunk base blocks (1 per week)
         let mossCount = max(1, elapsedDays / 7)
         let trunkBaseBlocks = blocks.enumerated()
-            .filter { $0.element.blockType == .trunk && $0.element.y <= VoxelConstants.blockSize }
+            .filter { $0.element.blockType == .trunk && $0.element.pos.y <= 1 }
 
         guard !trunkBaseBlocks.isEmpty else { return }
 
@@ -157,25 +157,22 @@ enum SeasonalEngine {
             let (_, trunkBlock) = trunkBaseBlocks[Int(rng.next() % UInt64(trunkBaseBlocks.count))]
 
             // Place moss adjacent to trunk base
-            let offsets: [(Float, Float)] = [
-                (VoxelConstants.blockSize, 0), (-VoxelConstants.blockSize, 0),
-                (0, VoxelConstants.blockSize), (0, -VoxelConstants.blockSize)
+            let offsets: [Int3] = [
+                Int3(x: 1, y: 0, z: 0), Int3(x: -1, y: 0, z: 0),
+                Int3(x: 0, y: 0, z: 1), Int3(x: 0, y: 0, z: -1)
             ]
             let offset = offsets[Int(rng.next() % UInt64(offsets.count))]
-            let mossX = trunkBlock.x + offset.0
-            let mossZ = trunkBlock.z + offset.1
+            let mossPos = trunkBlock.pos.adding(offset)
 
             // Check no block already exists there (including blocks added in this pass)
-            let alreadyExists = blocks.contains(where: { $0.overlaps(x: mossX, y: trunkBlock.y, z: mossZ) })
-                || result.newMossBlocks.contains(where: { $0.overlaps(x: mossX, y: trunkBlock.y, z: mossZ) })
+            let alreadyExists = blocks.contains(where: { $0.pos == mossPos })
+                || result.newMossBlocks.contains(where: { $0.pos == mossPos })
             if !alreadyExists {
                 result.newMossBlocks.append(VoxelBlockData(
-                    x: mossX,
-                    y: trunkBlock.y,
-                    z: mossZ,
+                    pos: mossPos,
                     blockType: .moss,
                     colorHex: summerMossColor,
-                    parentIndex: nil
+                    parentID: nil
                 ))
             }
         }
@@ -227,7 +224,7 @@ enum SeasonalEngine {
     ) {
         let now = Date()
         for (index, block) in blocks.enumerated()
-            where block.blockType == .leaf && abs(block.y) < VoxelConstants.blockSize {
+            where block.blockType == .leaf && block.pos.y == 0 {
             guard index < blockDates.count, let placedAt = blockDates[index] else { continue }
             let daysSincePlaced = Calendar.current.dateComponents([.day], from: placedAt, to: now).day ?? 0
             guard daysSincePlaced > maxDays, !result.fallenLeaves.contains(index) else { continue }
@@ -267,12 +264,12 @@ enum SeasonalEngine {
         let snowCount = min(perDay * max(1, elapsedDays), 20)
 
         // Find topmost block at each (x, z) position
-        var topBlocks: [String: (index: Int, block: VoxelBlockData)] = [:]
+        var topBlocks: [Int3: (index: Int, block: VoxelBlockData)] = [:]
         for (index, block) in blocks.enumerated()
             where block.blockType != .snow && !result.fallenLeaves.contains(index) {
-            let key = "\(block.x),\(block.z)"
+            let key = Int3(x: block.pos.x, y: 0, z: block.pos.z)
             if let existing = topBlocks[key] {
-                if block.y > existing.block.y {
+                if block.pos.y > existing.block.pos.y {
                     topBlocks[key] = (index, block)
                 }
             } else {
@@ -285,23 +282,21 @@ enum SeasonalEngine {
 
         for _ in 0 ..< snowCount {
             let entry = topEntries[Int(rng.next() % UInt64(topEntries.count))]
-            let snowY = entry.block.y + VoxelConstants.blockSize
+            let snowPos = entry.block.pos.adding(Int3(x: 0, y: 1, z: 0))
 
             // Check no snow block already exists at this position (including blocks added in this pass)
             let alreadyHasSnow = blocks.contains { b in
-                b.blockType == .snow && b.overlaps(x: entry.block.x, y: snowY, z: entry.block.z)
+                b.blockType == .snow && b.pos == snowPos
             } || result.newSnowBlocks.contains { b in
-                b.overlaps(x: entry.block.x, y: snowY, z: entry.block.z)
+                b.pos == snowPos
             }
 
             if !alreadyHasSnow {
                 result.newSnowBlocks.append(VoxelBlockData(
-                    x: entry.block.x,
-                    y: snowY,
-                    z: entry.block.z,
+                    pos: snowPos,
                     blockType: .snow,
                     colorHex: snowColor,
-                    parentIndex: entry.index
+                    parentID: entry.block.id
                 ))
             }
         }
