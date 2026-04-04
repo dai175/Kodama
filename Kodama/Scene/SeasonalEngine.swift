@@ -130,7 +130,7 @@ nonisolated enum SeasonalEngine {
 
     // MARK: - Private
 
-    private nonisolated static func applySpringEffects(
+    nonisolated private static func applySpringEffects(
         to blocks: [VoxelBlockData],
         result: inout SeasonalResult
     ) {
@@ -140,7 +140,7 @@ nonisolated enum SeasonalEngine {
         }
     }
 
-    private nonisolated static func applySummerEffects(
+    nonisolated private static func applySummerEffects(
         to blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         elapsedDays: Int,
@@ -178,7 +178,7 @@ nonisolated enum SeasonalEngine {
         }
     }
 
-    private nonisolated static func applyAutumnEffects(
+    nonisolated private static func applyAutumnEffects(
         to blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         result: inout SeasonalResult,
@@ -188,7 +188,7 @@ nonisolated enum SeasonalEngine {
         cleanupGroundLeaves(blocks: blocks, blockDates: blockDates, maxDays: 7, result: &result)
     }
 
-    private nonisolated static func transitionLeafColors(
+    nonisolated private static func transitionLeafColors(
         blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         result: inout SeasonalResult
@@ -216,7 +216,7 @@ nonisolated enum SeasonalEngine {
         }
     }
 
-    private nonisolated static func cleanupGroundLeaves(
+    nonisolated private static func cleanupGroundLeaves(
         blocks: [VoxelBlockData],
         blockDates: [Date?],
         maxDays: Int,
@@ -232,7 +232,7 @@ nonisolated enum SeasonalEngine {
         }
     }
 
-    private nonisolated static func expireOldFlowers(
+    nonisolated private static func expireOldFlowers(
         blocks: [VoxelBlockData],
         blockDates: [Date?],
         maxDays: Int,
@@ -247,7 +247,7 @@ nonisolated enum SeasonalEngine {
         }
     }
 
-    private nonisolated static func applyWinterEffects(
+    nonisolated private static func applyWinterEffects(
         to blocks: [VoxelBlockData],
         rng: inout SeededRandom,
         elapsedDays: Int,
@@ -304,7 +304,7 @@ nonisolated enum SeasonalEngine {
 
     // MARK: - Hex Color Utilities
 
-    private nonisolated static func hexToRGB(_ hex: String) -> (Int, Int, Int) {
+    nonisolated private static func hexToRGB(_ hex: String) -> (Int, Int, Int) {
         let hexString = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard hexString.count == 6,
               hexString.allSatisfy(\.isHexDigit),
@@ -319,7 +319,7 @@ nonisolated enum SeasonalEngine {
         return (r, g, b)
     }
 
-    private nonisolated static func rgbToHex(r: Int, g: Int, b: Int) -> String {
+    nonisolated private static func rgbToHex(r: Int, g: Int, b: Int) -> String {
         String(format: "#%02X%02X%02X", r, g, b)
     }
 }

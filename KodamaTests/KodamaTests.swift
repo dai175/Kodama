@@ -4,9 +4,9 @@
 //
 
 import Foundation
+@testable import Kodama
 import SceneKit
 import Testing
-@testable import Kodama
 
 struct KodamaTests {
     @Test func interactionTouchCoordinatesUseIntegers() {
@@ -93,12 +93,12 @@ struct KodamaTests {
             var visited = Set<Int>()
             var cursor: Int? = index
             var hops = 0
-            while let c = cursor {
-                #expect(c >= 0)
-                #expect(c < all.count)
-                #expect(!visited.contains(c))
-                visited.insert(c)
-                if let nextParentID = all[c].parentID {
+            while let current = cursor {
+                #expect(current >= 0)
+                #expect(current < all.count)
+                #expect(!visited.contains(current))
+                visited.insert(current)
+                if let nextParentID = all[current].parentID {
                     cursor = all.firstIndex(where: { $0.id == nextParentID })
                 } else {
                     cursor = nil

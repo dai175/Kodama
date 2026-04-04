@@ -9,7 +9,8 @@
 --commas inline
 --voidtype void
 --trimwhitespace always
---importgrouping testable-bottom
+--importgrouping alpha
+--modifier-order override,nonisolated,nonisolated(unsafe),private,fileprivate,internal,package,public,open,private(set),fileprivate(set),internal(set),package(set),public(set),open(set),final,dynamic,optional,required,convenience,indirect,isolated,lazy,weak,unowned,unowned(safe),unowned(unsafe),static,class,borrowing,consuming,mutating,nonmutating,prefix,infix,postfix,async
 --marktypes always
 --markextensions always
 --redundanttype inferred

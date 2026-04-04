@@ -5,31 +5,17 @@
 
 import Foundation
 
-// MARK: - GrowthResult
-
-nonisolated struct GrowthResult {
-    let newBlocks: [VoxelBlockData]
-    let seasonalEffects: SeasonalResult
-}
-
-nonisolated struct GrowthTreeState {
-    let seed: Int
-    let totalBlocks: Int
-}
-
-nonisolated struct InteractionPayload {
-    let timestamp: Date
-    let type: InteractionType
-    let value: String?
-    let touchX: Int?
-    let touchY: Int?
-    let touchZ: Int?
-}
-
 // MARK: - GrowthEngine
 
-// swiftlint:disable type_body_length
 nonisolated enum GrowthEngine {
+    private struct GrowthState {
+        var allNodes: [GrowthNode]
+        var newNodes: [GrowthNode] = []
+        var woodOccupied: Set<Int3>
+        var foliageOccupied: Set<Int3>
+        var nextNodeID: Int
+    }
+
     private static let growthAttemptsPerTick = 8
 
     private static let trunkDirections: [Int3] = [
@@ -165,117 +151,37 @@ nonisolated enum GrowthEngine {
         guard elapsedHours > 0 else { return [] }
 
         let existingNodes = toGrowthNodes(existingBlocks)
-        var allNodes = existingNodes
-        var nextNodeID = allNodes.count
-        var newNodes: [GrowthNode] = []
-
-        var woodOccupied = Set(allNodes.filter { $0.layer == .wood }.map(\.pos))
-        var foliageOccupied = Set(allNodes.filter { $0.layer == .foliage }.map(\.pos))
-
+        var state = GrowthState(
+            allNodes: existingNodes,
+            woodOccupied: Set(existingNodes.filter { $0.layer == .wood }.map(\.pos)),
+            foliageOccupied: Set(existingNodes.filter { $0.layer == .foliage }.map(\.pos)),
+            nextNodeID: existingNodes.count
+        )
         var rng = SeededRandom(seed: UInt64(tree.seed) &+ UInt64(max(0, tree.totalBlocks)))
 
         for tick in 0 ..< elapsedHours {
-            guard allNodes.count < VoxelConstants.maxBlocks else { break }
-
+            guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
             let tickDate = lastEval.addingTimeInterval(Double(tick) * 3600)
             let season = Season.current(from: tickDate)
-            let stage = growthStage(for: allNodes)
-            let growthCount = blocksPerTick(season: season, growthStage: stage, rng: &rng)
-
-            if growthCount == 0 { continue }
-
+            let growthCount = blocksPerTick(
+                season: season, growthStage: growthStage(for: state.allNodes), rng: &rng
+            )
+            guard growthCount > 0 else { continue }
             for _ in 0 ..< growthCount {
-                guard allNodes.count < VoxelConstants.maxBlocks else { break }
-
-                for _ in 0 ..< growthAttemptsPerTick {
-                    let modeRoll = Int(rng.next() % 100)
-                    let newNode: GrowthNode? = if modeRoll < 30 {
-                        growTrunk(
-                            allNodes: allNodes,
-                            woodOccupied: woodOccupied,
-                            rng: &rng
-                        ).map { node in
-                            GrowthNode(
-                                nodeID: nextNodeID,
-                                blockID: node.blockID,
-                                pos: node.pos,
-                                layer: node.layer,
-                                blockType: node.blockType,
-                                parentNodeID: node.parentNodeID
-                            )
-                        }
-                    } else if modeRoll < 68 {
-                        growBranch(
-                            allNodes: allNodes,
-                            woodOccupied: woodOccupied,
-                            touchTarget: logicalTouch(from: pendingInteractions.first { $0.type == .touch }),
-                            rng: &rng
-                        ).map { node in
-                            GrowthNode(
-                                nodeID: nextNodeID,
-                                blockID: node.blockID,
-                                pos: node.pos,
-                                layer: node.layer,
-                                blockType: node.blockType,
-                                parentNodeID: node.parentNodeID
-                            )
-                        }
-                    } else {
-                        growFoliageCluster(
-                            allNodes: allNodes,
-                            woodOccupied: woodOccupied,
-                            foliageOccupied: foliageOccupied,
-                            season: season,
-                            rng: &rng,
-                            startID: nextNodeID
-                        )?.first
-                    }
-
-                    guard let node = newNode else { continue }
-                    guard node.pos.y >= 0 else { continue }
-
-                    if node.layer == .wood {
-                        guard !woodOccupied.contains(node.pos) else { continue }
-                        woodOccupied.insert(node.pos)
-                    } else {
-                        guard !foliageOccupied.contains(node.pos) else { continue }
-                        foliageOccupied.insert(node.pos)
-                    }
-
-                    allNodes.append(node)
-                    newNodes.append(node)
-                    nextNodeID += 1
-                    break
-                }
+                guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
+                attemptGrowthUnit(state: &state, rng: &rng, season: season, pendingInteractions: pendingInteractions)
             }
-
             if Int(rng.next() % 100) < 18 {
-                let cluster = growFoliageCluster(
-                    allNodes: allNodes,
-                    woodOccupied: woodOccupied,
-                    foliageOccupied: foliageOccupied,
-                    season: season,
-                    rng: &rng,
-                    startID: nextNodeID
-                ) ?? []
-
-                for node in cluster {
-                    guard allNodes.count < VoxelConstants.maxBlocks else { break }
-                    guard !foliageOccupied.contains(node.pos), node.pos.y >= 0 else { continue }
-                    foliageOccupied.insert(node.pos)
-                    allNodes.append(node)
-                    newNodes.append(node)
-                    nextNodeID += 1
-                }
+                attemptBonusFoliage(state: &state, rng: &rng, season: season)
             }
         }
 
-        return toVoxelBlocks(newNodes: newNodes, allNodes: allNodes)
+        return toVoxelBlocks(newNodes: state.newNodes, allNodes: state.allNodes)
     }
 
     // MARK: - Growth Modes
 
-    private nonisolated static func growTrunk(
+    nonisolated private static func growTrunk(
         allNodes: [GrowthNode],
         woodOccupied: Set<Int3>,
         rng: inout SeededRandom
@@ -290,19 +196,14 @@ nonisolated enum GrowthEngine {
             let pos = parent.pos.adding(direction)
             guard !woodOccupied.contains(pos) else { continue }
             return GrowthNode(
-                nodeID: -1,
-                blockID: UUID(),
-                pos: pos,
-                layer: .wood,
-                blockType: .trunk,
-                parentNodeID: parent.nodeID
+                nodeID: -1, blockID: UUID(), pos: pos,
+                layer: .wood, blockType: .trunk, parentNodeID: parent.nodeID
             )
         }
-
         return nil
     }
 
-    private nonisolated static func growBranch(
+    nonisolated private static func growBranch(
         allNodes: [GrowthNode],
         woodOccupied: Set<Int3>,
         touchTarget: Int3?,
@@ -314,9 +215,9 @@ nonisolated enum GrowthEngine {
         let selectedTipID: Int
         if let touchTarget {
             let scored = woodTips.min { lhs, rhs in
-                let l = manhattanDistance(allNodes[lhs].pos, touchTarget)
-                let r = manhattanDistance(allNodes[rhs].pos, touchTarget)
-                return l < r
+                let lhsDist = manhattanDistance(allNodes[lhs].pos, touchTarget)
+                let rhsDist = manhattanDistance(allNodes[rhs].pos, touchTarget)
+                return lhsDist < rhsDist
             }
             selectedTipID = scored ?? woodTips[Int(rng.next() % UInt64(woodTips.count))]
         } else {
@@ -324,72 +225,48 @@ nonisolated enum GrowthEngine {
         }
 
         let parent = allNodes[selectedTipID]
-        let directions = shuffledDirections(branchDirections, rng: &rng)
-        for direction in directions {
+        for direction in shuffledDirections(branchDirections, rng: &rng) {
             let pos = parent.pos.adding(direction)
             guard !woodOccupied.contains(pos), pos.y >= 0 else { continue }
             return GrowthNode(
-                nodeID: -1,
-                blockID: UUID(),
-                pos: pos,
-                layer: .wood,
-                blockType: .branch,
-                parentNodeID: parent.nodeID
+                nodeID: -1, blockID: UUID(), pos: pos,
+                layer: .wood, blockType: .branch, parentNodeID: parent.nodeID
             )
         }
-
         return nil
     }
 
-    private nonisolated static func growFoliageCluster(
-        allNodes: [GrowthNode],
-        woodOccupied: Set<Int3>,
-        foliageOccupied: Set<Int3>,
+    nonisolated private static func growFoliageCluster(
+        state: GrowthState,
         season: Season,
-        rng: inout SeededRandom,
-        startID: Int
+        rng: inout SeededRandom
     ) -> [GrowthNode]? {
-        let branchTips = structuralTips(in: allNodes).filter { allNodes[$0].blockType == .branch }
+        let branchTips = structuralTips(in: state.allNodes).filter { state.allNodes[$0].blockType == .branch }
         guard !branchTips.isEmpty else { return nil }
 
         let tipID = branchTips[Int(rng.next() % UInt64(branchTips.count))]
-        let parent = allNodes[tipID]
-
+        let parent = state.allNodes[tipID]
         let clusterCount = Int(rng.next() % 3) + 1
         let offsets = shuffledDirections(foliageClusterOffsets, rng: &rng)
 
         var result: [GrowthNode] = []
-        var localFoliage = foliageOccupied
-        var nextID = startID
+        var localFoliage = state.foliageOccupied
+        var nextID = state.nextNodeID
 
         for offset in offsets.prefix(clusterCount) {
             let pos = parent.pos.adding(offset)
-            guard pos.y >= 0 else { continue }
-            guard !localFoliage.contains(pos) else { continue }
-
+            guard pos.y >= 0, !localFoliage.contains(pos) else { continue }
             let crowding = cardinalOffsets().reduce(into: 0) { count, cardinal in
-                if woodOccupied.contains(pos.adding(cardinal)) || localFoliage.contains(pos.adding(cardinal)) {
+                if state.woodOccupied.contains(pos.adding(cardinal)) || localFoliage.contains(pos.adding(cardinal)) {
                     count += 1
                 }
             }
             guard crowding < 5 else { continue }
-
-            let blockType: BlockType = if season == .spring, Int(rng.next() % 100) < 14 {
-                .flower
-            } else {
-                .leaf
-            }
-
-            result.append(
-                GrowthNode(
-                    nodeID: nextID,
-                    blockID: UUID(),
-                    pos: pos,
-                    layer: .foliage,
-                    blockType: blockType,
-                    parentNodeID: parent.nodeID
-                )
-            )
+            let blockType: BlockType = if season == .spring, Int(rng.next() % 100) < 14 { .flower } else { .leaf }
+            result.append(GrowthNode(
+                nodeID: nextID, blockID: UUID(), pos: pos,
+                layer: .foliage, blockType: blockType, parentNodeID: parent.nodeID
+            ))
             localFoliage.insert(pos)
             nextID += 1
         }
@@ -397,178 +274,61 @@ nonisolated enum GrowthEngine {
         return result.isEmpty ? nil : result
     }
 
-    // MARK: - Helpers
+    // MARK: - Tick Helpers
 
-    private nonisolated static func toGrowthNodes(_ blocks: [VoxelBlockData]) -> [GrowthNode] {
-        let nodeIDsByBlockID = nodeIDsByBlockID(blocks)
-        return blocks.enumerated().map { index, block in
-            GrowthNode(
-                nodeID: index,
-                blockID: block.id,
-                pos: GridMapper.int3(from: block),
-                layer: GridMapper.layer(for: block.blockType),
-                blockType: block.blockType,
-                parentNodeID: parentNodeID(for: block, nodeIDsByBlockID: nodeIDsByBlockID)
-            )
-        }
-    }
-
-    private nonisolated static func nodeIDsByBlockID(_ blocks: [VoxelBlockData]) -> [UUID: Int] {
-        var result: [UUID: Int] = [:]
-        for (index, block) in blocks.enumerated() {
-            result[block.id] = index
-        }
-        return result
-    }
-
-    private nonisolated static func parentNodeID(for block: VoxelBlockData, nodeIDsByBlockID: [UUID: Int]) -> Int? {
-        guard let parentID = block.parentID else { return nil }
-        return nodeIDsByBlockID[parentID]
-    }
-
-    private nonisolated static func toVoxelBlocks(newNodes: [GrowthNode], allNodes: [GrowthNode]) -> [VoxelBlockData] {
-        let blockIDsByNodeID = Dictionary(uniqueKeysWithValues: allNodes.map { ($0.nodeID, $0.blockID) })
-        return newNodes.map { node in
-            let parentID = node.parentNodeID.flatMap { blockIDsByNodeID[$0] }
-            return VoxelBlockData(
-                id: node.blockID,
-                pos: node.pos,
-                blockType: node.blockType,
-                colorHex: blockColor(for: node.blockType),
-                parentID: parentID
-            )
-        }
-    }
-
-    private nonisolated static func blockColor(for blockType: BlockType) -> String {
-        switch blockType {
-        case .trunk:
-            TreeBuilder.trunkColors.first ?? "#4A3520"
-        case .branch:
-            TreeBuilder.branchColors.first ?? "#5A4530"
-        case .leaf:
-            TreeBuilder.leafColors.first ?? "#7AB648"
-        case .flower:
-            SeasonalEngine.springFlowerColor
-        case .moss:
-            SeasonalEngine.summerMossColor
-        case .snow:
-            SeasonalEngine.snowColor
-        }
-    }
-
-    private nonisolated static func growthStage(for nodes: [GrowthNode]) -> TreeBuilder.GrowthStage {
-        let woodCount = nodes.count(where: { $0.layer == .wood })
-        let foliageCount = nodes.count(where: { $0.layer == .foliage })
-        let maxY = nodes.map(\.pos.y).max() ?? 0
-
-        if woodCount < 16 || maxY <= 6 {
-            return .sapling
-        }
-        if woodCount < 28 || foliageCount < 18 {
-            return .young
-        }
-        return .mature
-    }
-
-    private nonisolated static func blocksPerTick(
+    nonisolated private static func attemptGrowthUnit(
+        state: inout GrowthState,
+        rng: inout SeededRandom,
         season: Season,
-        growthStage: TreeBuilder.GrowthStage,
-        rng: inout SeededRandom
-    ) -> Int {
-        let roll = Int(rng.next() % 100)
-
-        switch season {
-        case .spring:
-            return roll < 22 ? 1 : 0
-        case .summer:
-            let threshold = switch growthStage {
-            case .sapling:
-                14
-            case .young:
-                16
-            case .mature:
-                18
+        pendingInteractions: [InteractionPayload]
+    ) {
+        let touchTarget = logicalTouch(from: pendingInteractions.first { $0.type == .touch })
+        for _ in 0 ..< growthAttemptsPerTick {
+            let modeRoll = Int(rng.next() % 100)
+            let newNode: GrowthNode? = if modeRoll < 30 {
+                growTrunk(allNodes: state.allNodes, woodOccupied: state.woodOccupied, rng: &rng)
+                    .map { raw in
+                        GrowthNode(nodeID: state.nextNodeID, blockID: raw.blockID, pos: raw.pos,
+                                   layer: raw.layer, blockType: raw.blockType, parentNodeID: raw.parentNodeID)
+                    }
+            } else if modeRoll < 68 {
+                growBranch(allNodes: state.allNodes, woodOccupied: state.woodOccupied,
+                           touchTarget: touchTarget, rng: &rng)
+                    .map { raw in
+                        GrowthNode(nodeID: state.nextNodeID, blockID: raw.blockID, pos: raw.pos,
+                                   layer: raw.layer, blockType: raw.blockType, parentNodeID: raw.parentNodeID)
+                    }
+            } else {
+                growFoliageCluster(state: state, season: season, rng: &rng)?.first
             }
-            return roll < threshold ? 1 : 0
-        case .autumn:
-            return roll < 6 ? 1 : 0
-        case .winter:
-            return 0
+            guard let node = newNode, node.pos.y >= 0 else { continue }
+            if node.layer == .wood {
+                guard !state.woodOccupied.contains(node.pos) else { continue }
+                state.woodOccupied.insert(node.pos)
+            } else {
+                guard !state.foliageOccupied.contains(node.pos) else { continue }
+                state.foliageOccupied.insert(node.pos)
+            }
+            state.allNodes.append(node)
+            state.newNodes.append(node)
+            state.nextNodeID += 1
+            break
         }
     }
 
-    private nonisolated static func structuralTips(in nodes: [GrowthNode]) -> [Int] {
-        var parentHasWoodChild = Set<Int>()
-        for node in nodes where node.layer == .wood {
-            if let parentNodeID = node.parentNodeID {
-                parentHasWoodChild.insert(parentNodeID)
-            }
+    nonisolated private static func attemptBonusFoliage(
+        state: inout GrowthState,
+        rng: inout SeededRandom,
+        season: Season
+    ) {
+        let cluster = growFoliageCluster(state: state, season: season, rng: &rng) ?? []
+        for node in cluster {
+            guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
+            guard !state.foliageOccupied.contains(node.pos), node.pos.y >= 0 else { continue }
+            state.foliageOccupied.insert(node.pos)
+            state.allNodes.append(node)
+            state.newNodes.append(node)
+            state.nextNodeID += 1
         }
-
-        return nodes.enumerated().compactMap { index, node in
-            guard node.layer == .wood else { return nil }
-            return parentHasWoodChild.contains(node.nodeID) ? nil : index
-        }
-    }
-
-    private nonisolated static func logicalTouch(from interaction: InteractionPayload?) -> Int3? {
-        guard let interaction,
-              let x = interaction.touchX,
-              let y = interaction.touchY,
-              let z = interaction.touchZ
-        else { return nil }
-
-        return Int3(x: x, y: y, z: z)
-    }
-
-    private nonisolated static func shuffledDirections<T>(_ values: [T], rng: inout SeededRandom) -> [T] {
-        var copy = values
-        guard copy.count > 1 else { return copy }
-        for i in 0 ..< (copy.count - 1) {
-            let j = i + Int(rng.next() % UInt64(copy.count - i))
-            copy.swapAt(i, j)
-        }
-        return copy
-    }
-
-    private nonisolated static func cardinalOffsets() -> [Int3] {
-        [
-            Int3(x: 1, y: 0, z: 0), Int3(x: -1, y: 0, z: 0),
-            Int3(x: 0, y: 1, z: 0), Int3(x: 0, y: -1, z: 0),
-            Int3(x: 0, y: 0, z: 1), Int3(x: 0, y: 0, z: -1)
-        ]
-    }
-
-    private nonisolated static func manhattanDistance(_ lhs: Int3, _ rhs: Int3) -> Int {
-        abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y) + abs(lhs.z - rhs.z)
-    }
-
-    nonisolated static func branchDistanceFromTrunk(startingAt index: Int, allBlocks: [VoxelBlockData]) -> Int {
-        guard index >= 0, index < allBlocks.count else { return 0 }
-
-        var distance = 0
-        var currentIndex: Int? = index
-
-        while let resolvedIndex = currentIndex {
-            guard resolvedIndex >= 0, resolvedIndex < allBlocks.count else { break }
-
-            let block = allBlocks[resolvedIndex]
-            if block.blockType == .trunk {
-                return distance
-            }
-            if block.blockType == .branch {
-                distance += 1
-            }
-            guard let parentID = block.parentID else {
-                currentIndex = nil
-                continue
-            }
-            currentIndex = allBlocks.firstIndex(where: { $0.id == parentID })
-        }
-
-        return distance
     }
 }
-
-// swiftlint:enable type_body_length
