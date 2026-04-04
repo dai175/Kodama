@@ -174,6 +174,29 @@ struct KodamaTests {
             #expect(block.y >= parent.y)
         }
     }
+
+    @Test func matureSummerGrowthStillAddsStructuralBlocks() {
+        let start = makeDate(year: 2026, month: 6, day: 1)
+        let end = makeDate(year: 2026, month: 7, day: 1)
+        let tree = BonsaiTree(seed: 123)
+        let blocks = makeMatureTree()
+        tree.totalBlocks = blocks.count
+
+        let newBlocks = GrowthEngine.calculateGrowth(
+            tree: tree,
+            existingBlocks: blocks,
+            since: start,
+            currentDate: end,
+            maxElapsedHours: 24 * 30
+        )
+
+        let structuralGrowth = newBlocks.filter { $0.blockType == .branch || $0.blockType == .trunk }
+        let foliageGrowth = newBlocks.filter { $0.blockType == .leaf || $0.blockType == .flower }
+
+        #expect(!newBlocks.isEmpty)
+        #expect(!structuralGrowth.isEmpty)
+        #expect(structuralGrowth.count >= foliageGrowth.count / 2)
+    }
 }
 
 private func makeDate(year: Int, month: Int, day: Int) -> Date {
