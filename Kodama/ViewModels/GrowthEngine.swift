@@ -334,8 +334,7 @@ enum GrowthEngine {
             return block.blockType == .trunk ? baseWeight : baseWeight * 0.3
         }
 
-        let indices = thickenableBlocks.indices.map(\.self)
-        let selectedLocalIndex = weightedSelect(indices: Array(indices), weights: weights, rng: &rng)
+        let selectedLocalIndex = weightedSelect(indices: Array(thickenableBlocks.indices), weights: weights, rng: &rng)
         let (blockIndex, selectedBlock) = thickenableBlocks[selectedLocalIndex]
 
         var newBlocks: [VoxelBlockData] = []

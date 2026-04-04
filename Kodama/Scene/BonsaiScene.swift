@@ -173,7 +173,7 @@ final class BonsaiScene {
 
         for (yLayer, (outerRadius, innerRadius)) in layers.enumerated() {
             let yPos = Float(yLayer) * bs
-            let isRim = yLayer == 4
+            let isRim = yLayer == layers.count - 1
             let isBottom = yLayer == 0
 
             for bx in -4 ... 4 {
@@ -186,7 +186,7 @@ final class BonsaiScene {
                     let node = SCNNode()
                     if isRim {
                         node.geometry = rimGeom
-                    } else if isBottom || dist > innerRadius - 0.5 {
+                    } else if isBottom || dist > innerRadius - bs {
                         node.geometry = darkGeom
                     } else {
                         node.geometry = baseGeom
@@ -201,7 +201,6 @@ final class BonsaiScene {
         pot.name = "pot"
         rotationNode.addChildNode(pot)
 
-        // Soil: fill interior of rim layer (Y=4, dist <= innerRadius of rim = 2.5)
         let soilMaterial = SCNMaterial()
         soilMaterial.diffuse.contents = UIColor(red: 45 / 255, green: 35 / 255, blue: 25 / 255, alpha: 1)
         soilMaterial.roughness.contents = 0.9
@@ -209,11 +208,14 @@ final class BonsaiScene {
         soilGeom.materials = [soilMaterial]
 
         let soilParent = SCNNode()
-        let rimY = Float(4) * bs
-        for bx in -4 ... 4 {
-            for bz in -4 ... 4 {
+        let rimLayer = layers[layers.count - 1]
+        let rimY = Float(layers.count - 1) * bs
+        let soilRadius = rimLayer.1
+        let soilGridRange = Int(ceil(soilRadius))
+        for bx in -soilGridRange ... soilGridRange {
+            for bz in -soilGridRange ... soilGridRange {
                 let dist = sqrt(Float(bx * bx + bz * bz))
-                guard dist <= 2.5 else { continue }
+                guard dist <= soilRadius else { continue }
                 let soilNode = SCNNode(geometry: soilGeom)
                 soilNode.position = SCNVector3(Float(bx) * bs, rimY, Float(bz) * bs)
                 soilParent.addChildNode(soilNode)
@@ -223,8 +225,7 @@ final class BonsaiScene {
         soil.name = "soil"
         rotationNode.addChildNode(soil)
 
-        // Tree anchor sits above the pot (5 layers * blockSize)
-        treeAnchor.position = SCNVector3(0, Float(5) * bs, 0)
+        treeAnchor.position = SCNVector3(0, Float(layers.count) * bs, 0)
         treeAnchor.name = "treeAnchor"
         rotationNode.addChildNode(treeAnchor)
     }
