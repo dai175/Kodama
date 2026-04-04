@@ -142,15 +142,15 @@ final class BonsaiScene {
 
         // Materials
         let darkMaterial = SCNMaterial()
-        darkMaterial.diffuse.contents = UIColor(red: 140 / 255, green: 88 / 255, blue: 48 / 255, alpha: 1)
+        darkMaterial.diffuse.contents = UIColor(hex: "#8C5830")
         darkMaterial.roughness.contents = 0.8
 
         let baseMaterial = SCNMaterial()
-        baseMaterial.diffuse.contents = UIColor(red: 160 / 255, green: 112 / 255, blue: 64 / 255, alpha: 1)
+        baseMaterial.diffuse.contents = UIColor(hex: "#A07040")
         baseMaterial.roughness.contents = 0.8
 
         let rimMaterial = SCNMaterial()
-        rimMaterial.diffuse.contents = UIColor(red: 180 / 255, green: 130 / 255, blue: 80 / 255, alpha: 1)
+        rimMaterial.diffuse.contents = UIColor(hex: "#B48250")
         rimMaterial.roughness.contents = 0.8
 
         let darkGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
