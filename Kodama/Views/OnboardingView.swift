@@ -52,53 +52,55 @@ struct OnboardingView: View {
     }
 
     private func onboardingPage(title: String, subtitle: String?, showButton: Bool) -> some View {
-        VStack(spacing: 0) {
-            // Top 2/3: Mini SceneKit view
-            OnboardingSaplingView()
-                .frame(maxWidth: .infinity)
-                .frame(height: UIScreen.main.bounds.height * 0.55)
-                .clipped()
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Top 2/3: Mini SceneKit view
+                OnboardingSaplingView()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: geometry.size.height * 0.55)
+                    .clipped()
 
-            Spacer()
-                .frame(height: 24)
+                Spacer()
+                    .frame(height: 24)
 
-            // Bottom 1/3: Text content
-            VStack(spacing: 16) {
-                Text(title)
-                    .font(.system(size: 20, weight: .light, design: .default))
-                    .foregroundStyle(Color.softWhite.opacity(0.8))
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 14, weight: .light, design: .default))
-                        .foregroundStyle(Color.softWhite.opacity(0.5))
+                // Bottom 1/3: Text content
+                VStack(spacing: 16) {
+                    Text(title)
+                        .font(.system(size: 20, weight: .light, design: .default))
+                        .foregroundStyle(Color.softWhite.opacity(0.8))
                         .multilineTextAlignment(.center)
-                }
+                        .lineSpacing(4)
 
-                if showButton {
-                    Button {
-                        withAnimation(.easeInOut(duration: 1.0)) {
-                            appState.hasCompletedOnboarding = true
-                        }
-                    } label: {
-                        Text("Begin")
-                            .font(.system(size: 18, weight: .light, design: .default))
-                            .foregroundStyle(Color.softWhite.opacity(0.9))
-                            .padding(.horizontal, 48)
-                            .padding(.vertical, 12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 24)
-                                    .stroke(Color.softWhite.opacity(0.3), lineWidth: 1)
-                            )
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 14, weight: .light, design: .default))
+                            .foregroundStyle(Color.softWhite.opacity(0.5))
+                            .multilineTextAlignment(.center)
                     }
-                    .padding(.top, 24)
-                }
-            }
-            .padding(.horizontal, 40)
 
-            Spacer()
+                    if showButton {
+                        Button {
+                            withAnimation(.easeInOut(duration: 1.0)) {
+                                appState.hasCompletedOnboarding = true
+                            }
+                        } label: {
+                            Text("Begin")
+                                .font(.system(size: 18, weight: .light, design: .default))
+                                .foregroundStyle(Color.softWhite.opacity(0.9))
+                                .padding(.horizontal, 48)
+                                .padding(.vertical, 12)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 24)
+                                        .stroke(Color.softWhite.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                        .padding(.top, 24)
+                    }
+                }
+                .padding(.horizontal, 40)
+
+                Spacer()
+            }
         }
     }
 }

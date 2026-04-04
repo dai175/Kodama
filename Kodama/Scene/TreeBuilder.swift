@@ -89,148 +89,80 @@ enum TreeBuilder {
     @discardableResult
     private static func buildTrunk(blocks: inout [VoxelBlockData], rng: inout SeededRandom) -> Int {
         let blockSize = VoxelConstants.blockSize
+        let height = 2 + Int(rng.next() % 2) // 2-3 blocks tall
 
-        // Radius per yIdx layer (in block-grid units)
-        // yIdx 0-1: radius 2.5, yIdx 2-3: radius 1.5, yIdx 4-5: radius 1.0, yIdx 6-7: radius 0.0 (center only)
-        let radii: [Float] = [2.5, 2.5, 1.5, 1.5, 1.0, 1.0, 0.0, 0.0]
-
-        var topCenterIndex = 0
-
-        for yIdx in 0 ..< 8 {
-            let radius = radii[yIdx]
-            let yWorld = Float(yIdx) * blockSize
-            let iRadius = Int(ceil(radius))
-
-            // Collect positions for this layer, sorted for deterministic ordering
-            var layerPositions: [(bx: Int, bz: Int)] = []
-            for bx in -iRadius ... iRadius {
-                for bz in -iRadius ... iRadius where sqrt(Float(bx * bx + bz * bz)) <= radius {
-                    layerPositions.append((bx, bz))
-                }
-            }
-            layerPositions.sort { lhs, rhs in
-                lhs.bx == rhs.bx ? lhs.bz < rhs.bz : lhs.bx < rhs.bx
-            }
-
-            for pos in layerPositions {
-                let xWorld = Float(pos.bx) * blockSize
-                let zWorld = Float(pos.bz) * blockSize
-
-                var parentIdx: Int?
-                if yIdx > 0 {
-                    var bestDist = Float.greatestFiniteMagnitude
-                    for (i, candidate) in blocks.enumerated() {
-                        // Only consider blocks from the layer just below (yIdx-1)
-                        let expectedY = Float(yIdx - 1) * blockSize
-                        guard abs(candidate.y - expectedY) < 0.001 else { continue }
-                        let dx = candidate.x - xWorld
-                        let dz = candidate.z - zWorld
-                        let dist = dx * dx + dz * dz
-                        if dist < bestDist {
-                            bestDist = dist
-                            parentIdx = i
-                        }
-                    }
-                }
-
-                let color = trunkColors[Int(rng.next() % UInt64(trunkColors.count))]
-                let idx = blocks.count
-
-                blocks.append(VoxelBlockData(
-                    x: xWorld,
-                    y: yWorld,
-                    z: zWorld,
-                    blockType: .trunk,
-                    colorHex: color,
-                    parentIndex: parentIdx
-                ))
-
-                // Track the top center block (x=0, z=0 at highest yIdx)
-                if pos.bx == 0, pos.bz == 0 {
-                    topCenterIndex = idx
-                }
-            }
+        for yIdx in 0 ..< height {
+            let parentIdx = yIdx > 0 ? blocks.count - 1 : nil
+            let color = trunkColors[Int(rng.next() % UInt64(trunkColors.count))]
+            blocks.append(VoxelBlockData(
+                x: 0,
+                y: Float(yIdx) * blockSize,
+                z: 0,
+                blockType: .trunk,
+                colorHex: color,
+                parentIndex: parentIdx
+            ))
         }
 
-        return topCenterIndex
+        return blocks.count - 1
     }
 
     private static func buildBranches(blocks: inout [VoxelBlockData], rng: inout SeededRandom, topIndex: Int) {
+        // 50% chance of a single short branch
+        guard rng.next() % 2 == 0 else { return }
+
         let blockSize = VoxelConstants.blockSize
-        let branchCount = Int(rng.next() % 3) + 2
         let directions: [(Float, Float)] = [
             (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
         ]
-        var usedDirections: Set<Int> = []
+        let dir = directions[Int(rng.next() % UInt64(directions.count))]
+        let branchColor = branchColors[Int(rng.next() % UInt64(branchColors.count))]
+        let branchLength = 1 + Int(rng.next() % 2) // 1-2 blocks
 
-        for _ in 0 ..< branchCount {
-            var dirIndex: Int
-            repeat {
-                dirIndex = Int(rng.next() % UInt64(directions.count))
-            } while usedDirections.contains(dirIndex) && usedDirections.count < directions.count
-            usedDirections.insert(dirIndex)
+        // Branch origin: yIdx 1 (middle of a 2-3 block trunk)
+        let originYIdx = 1
+        let originY = Float(originYIdx) * blockSize
 
-            let dir = directions[dirIndex]
-            let branchColor = branchColors[Int(rng.next() % UInt64(branchColors.count))]
-            let branchLength = Int(rng.next() % 4) + 2
-
-            // Choose branch origin: center column block at yIdx 5 or 6 (60-80% of trunk height)
-            let originYIdx = 5 + Int(rng.next() % 2)
-            let originY = Float(originYIdx) * blockSize
-
-            // Find the center column block at originY as the branch origin parent
-            var originParentIdx = topIndex
-            for (i, candidate) in blocks.enumerated() {
-                if abs(candidate.x) < 0.001, abs(candidate.z) < 0.001, abs(candidate.y - originY) < 0.001 {
-                    originParentIdx = i
-                    break
-                }
+        var originParentIdx = topIndex
+        for (i, candidate) in blocks.enumerated() {
+            if abs(candidate.x) < 0.001, abs(candidate.z) < 0.001, abs(candidate.y - originY) < 0.001 {
+                originParentIdx = i
+                break
             }
-
-            // Build branch steps from trunk surface outward
-            var curX = Float(0)
-            var curY = originY
-            var curZ = Float(0)
-            var prevIdx = originParentIdx
-
-            for step in 0 ..< branchLength {
-                curX += dir.0
-                curZ += dir.1
-                // Add upward curve every other step
-                if step % 2 == 1 {
-                    curY += blockSize
-                }
-
-                // Reuse existing trunk block at this position to avoid z-fighting
-                if let existingIdx = blocks.indices.first(where: {
-                    abs(blocks[$0].x - curX) < 0.001 &&
-                        abs(blocks[$0].y - curY) < 0.001 &&
-                        abs(blocks[$0].z - curZ) < 0.001
-                }) {
-                    prevIdx = existingIdx
-                    continue
-                }
-
-                let stepIdx = blocks.count
-                blocks.append(VoxelBlockData(
-                    x: curX,
-                    y: curY,
-                    z: curZ,
-                    blockType: .branch,
-                    colorHex: branchColor,
-                    parentIndex: prevIdx
-                ))
-                prevIdx = stepIdx
-            }
-
-            buildBranchLeaves(blocks: &blocks, rng: &rng, dir: dir, topIndex: prevIdx)
         }
+
+        var curX = Float(0)
+        var curY = originY
+        var curZ = Float(0)
+        var prevIdx = originParentIdx
+
+        for step in 0 ..< branchLength {
+            curX += dir.0
+            curZ += dir.1
+            // Second block curves upward
+            if step == 1 {
+                curY += blockSize
+            }
+
+            let stepIdx = blocks.count
+            blocks.append(VoxelBlockData(
+                x: curX,
+                y: curY,
+                z: curZ,
+                blockType: .branch,
+                colorHex: branchColor,
+                parentIndex: prevIdx
+            ))
+            prevIdx = stepIdx
+        }
+
+        buildBranchLeaves(blocks: &blocks, rng: &rng, dir: dir, topIndex: prevIdx)
     }
 
     private static func buildBranchLeaves(
         blocks: inout [VoxelBlockData],
         rng: inout SeededRandom,
-        dir: (Float, Float),
+        dir _: (Float, Float),
         topIndex: Int
     ) {
         let blockSize = VoxelConstants.blockSize
@@ -247,21 +179,6 @@ enum TreeBuilder {
             colorHex: leafColor,
             parentIndex: topIndex
         ))
-
-        // 50% chance of a second leaf adjacent
-        if rng.next() % 2 == 0 {
-            let secondLeafColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
-            let offsetX = dir.0 == 0 ? (Int(rng.next() % 2) == 0 ? blockSize : -blockSize) : dir.0
-            let offsetZ = dir.1 == 0 ? (Int(rng.next() % 2) == 0 ? blockSize : -blockSize) : dir.1
-            blocks.append(VoxelBlockData(
-                x: tipX + offsetX,
-                y: tipY + blockSize,
-                z: tipZ + offsetZ,
-                blockType: .leaf,
-                colorHex: secondLeafColor,
-                parentIndex: topIndex
-            ))
-        }
     }
 
     private static func buildCrownLeaf(blocks: inout [VoxelBlockData], rng: inout SeededRandom, topIndex: Int) {
