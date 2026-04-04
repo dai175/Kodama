@@ -633,7 +633,11 @@ enum TreeBuilder {
         for block in blocks {
             let geometry = cachedGeometry(for: block.colorHex, cache: &geometryCache)
             let node = SCNNode(geometry: geometry)
-            node.position = SCNVector3(block.x, block.y, block.z)
+            node.position = SCNVector3(
+                block.x * VoxelConstants.renderScale,
+                block.y * VoxelConstants.renderScale,
+                block.z * VoxelConstants.renderScale
+            )
             root.addChildNode(node)
         }
 
