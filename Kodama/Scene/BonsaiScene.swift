@@ -186,7 +186,7 @@ final class BonsaiScene {
                     let node = SCNNode()
                     if isRim {
                         node.geometry = rimGeom
-                    } else if isBottom || dist > outerRadius - bs {
+                    } else if isBottom || dist > outerRadius - 1.0 {
                         node.geometry = darkGeom
                     } else {
                         node.geometry = baseGeom
