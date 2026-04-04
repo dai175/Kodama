@@ -7,17 +7,17 @@ import Foundation
 
 // MARK: - GrowthResult
 
-struct GrowthResult {
+nonisolated struct GrowthResult {
     let newBlocks: [VoxelBlockData]
     let seasonalEffects: SeasonalResult
 }
 
-struct GrowthTreeState {
+nonisolated struct GrowthTreeState {
     let seed: Int
     let totalBlocks: Int
 }
 
-struct InteractionPayload {
+nonisolated struct InteractionPayload {
     let timestamp: Date
     let type: InteractionType
     let value: String?
@@ -29,7 +29,7 @@ struct InteractionPayload {
 // MARK: - GrowthEngine
 
 // swiftlint:disable type_body_length
-enum GrowthEngine {
+nonisolated enum GrowthEngine {
     private static let growthAttemptsPerTick = 8
 
     private static let trunkDirections: [Int3] = [
@@ -196,11 +196,12 @@ enum GrowthEngine {
                             rng: &rng
                         ).map { node in
                             GrowthNode(
-                                id: nextNodeID,
+                                nodeID: nextNodeID,
+                                blockID: node.blockID,
                                 pos: node.pos,
                                 layer: node.layer,
                                 blockType: node.blockType,
-                                parentID: node.parentID
+                                parentNodeID: node.parentNodeID
                             )
                         }
                     } else if modeRoll < 68 {
@@ -211,11 +212,12 @@ enum GrowthEngine {
                             rng: &rng
                         ).map { node in
                             GrowthNode(
-                                id: nextNodeID,
+                                nodeID: nextNodeID,
+                                blockID: node.blockID,
                                 pos: node.pos,
                                 layer: node.layer,
                                 blockType: node.blockType,
-                                parentID: node.parentID
+                                parentNodeID: node.parentNodeID
                             )
                         }
                     } else {
@@ -268,7 +270,7 @@ enum GrowthEngine {
             }
         }
 
-        return toVoxelBlocks(newNodes: newNodes, existingCount: existingBlocks.count)
+        return toVoxelBlocks(newNodes: newNodes, allNodes: allNodes)
     }
 
     // MARK: - Growth Modes
@@ -287,7 +289,14 @@ enum GrowthEngine {
         for direction in shuffledDirections(trunkDirections, rng: &rng) {
             let pos = parent.pos.adding(direction)
             guard !woodOccupied.contains(pos) else { continue }
-            return GrowthNode(id: -1, pos: pos, layer: .wood, blockType: .trunk, parentID: parent.id)
+            return GrowthNode(
+                nodeID: -1,
+                blockID: UUID(),
+                pos: pos,
+                layer: .wood,
+                blockType: .trunk,
+                parentNodeID: parent.nodeID
+            )
         }
 
         return nil
@@ -319,7 +328,14 @@ enum GrowthEngine {
         for direction in directions {
             let pos = parent.pos.adding(direction)
             guard !woodOccupied.contains(pos), pos.y >= 0 else { continue }
-            return GrowthNode(id: -1, pos: pos, layer: .wood, blockType: .branch, parentID: parent.id)
+            return GrowthNode(
+                nodeID: -1,
+                blockID: UUID(),
+                pos: pos,
+                layer: .wood,
+                blockType: .branch,
+                parentNodeID: parent.nodeID
+            )
         }
 
         return nil
@@ -364,7 +380,16 @@ enum GrowthEngine {
                 .leaf
             }
 
-            result.append(GrowthNode(id: nextID, pos: pos, layer: .foliage, blockType: blockType, parentID: parent.id))
+            result.append(
+                GrowthNode(
+                    nodeID: nextID,
+                    blockID: UUID(),
+                    pos: pos,
+                    layer: .foliage,
+                    blockType: blockType,
+                    parentNodeID: parent.nodeID
+                )
+            )
             localFoliage.insert(pos)
             nextID += 1
         }
@@ -375,34 +400,42 @@ enum GrowthEngine {
     // MARK: - Helpers
 
     private nonisolated static func toGrowthNodes(_ blocks: [VoxelBlockData]) -> [GrowthNode] {
-        blocks.enumerated().map { index, block in
+        let nodeIDsByBlockID = nodeIDsByBlockID(blocks)
+        return blocks.enumerated().map { index, block in
             GrowthNode(
-                id: index,
+                nodeID: index,
+                blockID: block.id,
                 pos: GridMapper.int3(from: block),
                 layer: GridMapper.layer(for: block.blockType),
                 blockType: block.blockType,
-                parentID: validParentID(block.parentIndex, count: blocks.count)
+                parentNodeID: parentNodeID(for: block, nodeIDsByBlockID: nodeIDsByBlockID)
             )
         }
     }
 
-    private nonisolated static func validParentID(_ parentIndex: Int?, count: Int) -> Int? {
-        guard let parentIndex else { return nil }
-        guard parentIndex >= 0, parentIndex < count else { return nil }
-        return parentIndex
+    private nonisolated static func nodeIDsByBlockID(_ blocks: [VoxelBlockData]) -> [UUID: Int] {
+        var result: [UUID: Int] = [:]
+        for (index, block) in blocks.enumerated() {
+            result[block.id] = index
+        }
+        return result
     }
 
-    private nonisolated static func toVoxelBlocks(newNodes: [GrowthNode], existingCount _: Int) -> [VoxelBlockData] {
-        newNodes.map { node in
-            let coords = node.pos.asVoxelCoordinates
-            let parentIndex: Int? = node.parentID
+    private nonisolated static func parentNodeID(for block: VoxelBlockData, nodeIDsByBlockID: [UUID: Int]) -> Int? {
+        guard let parentID = block.parentID else { return nil }
+        return nodeIDsByBlockID[parentID]
+    }
+
+    private nonisolated static func toVoxelBlocks(newNodes: [GrowthNode], allNodes: [GrowthNode]) -> [VoxelBlockData] {
+        let blockIDsByNodeID = Dictionary(uniqueKeysWithValues: allNodes.map { ($0.nodeID, $0.blockID) })
+        return newNodes.map { node in
+            let parentID = node.parentNodeID.flatMap { blockIDsByNodeID[$0] }
             return VoxelBlockData(
-                x: coords.0,
-                y: coords.1,
-                z: coords.2,
+                id: node.blockID,
+                pos: node.pos,
                 blockType: node.blockType,
                 colorHex: blockColor(for: node.blockType),
-                parentIndex: parentIndex
+                parentID: parentID
             )
         }
     }
@@ -468,14 +501,14 @@ enum GrowthEngine {
     private nonisolated static func structuralTips(in nodes: [GrowthNode]) -> [Int] {
         var parentHasWoodChild = Set<Int>()
         for node in nodes where node.layer == .wood {
-            if let parentID = node.parentID {
-                parentHasWoodChild.insert(parentID)
+            if let parentNodeID = node.parentNodeID {
+                parentHasWoodChild.insert(parentNodeID)
             }
         }
 
         return nodes.enumerated().compactMap { index, node in
             guard node.layer == .wood else { return nil }
-            return parentHasWoodChild.contains(node.id) ? nil : index
+            return parentHasWoodChild.contains(node.nodeID) ? nil : index
         }
     }
 
@@ -527,7 +560,11 @@ enum GrowthEngine {
             if block.blockType == .branch {
                 distance += 1
             }
-            currentIndex = block.parentIndex
+            guard let parentID = block.parentID else {
+                currentIndex = nil
+                continue
+            }
+            currentIndex = allBlocks.firstIndex(where: { $0.id == parentID })
         }
 
         return distance

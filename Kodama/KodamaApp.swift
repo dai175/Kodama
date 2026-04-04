@@ -27,7 +27,13 @@ struct KodamaApp: App {
                 schema: schema,
                 url: storeURL
             )
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            do {
+                return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            } catch {
+                // Destructive fallback for incompatible local schema during prototyping.
+                try? FileManager.default.removeItem(at: storeURL)
+                return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            }
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }

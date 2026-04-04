@@ -7,7 +7,7 @@ import Foundation
 
 // MARK: - Season
 
-enum Season: String, CaseIterable {
+nonisolated enum Season: String, CaseIterable {
     case spring
     case summer
     case autumn
@@ -18,7 +18,7 @@ enum Season: String, CaseIterable {
         nonisolated(unsafe) static var debugOverride: Season?
     #endif
 
-    static func current(from date: Date = Date()) -> Season {
+    nonisolated static func current(from date: Date = Date()) -> Season {
         #if DEBUG
             if let override = debugOverride {
                 return override

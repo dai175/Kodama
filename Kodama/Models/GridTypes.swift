@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct Int3: Hashable {
+nonisolated struct Int3: Hashable {
     let x: Int
     let y: Int
     let z: Int
@@ -14,27 +14,28 @@ struct Int3: Hashable {
         Int3(x: x + other.x, y: y + other.y, z: z + other.z)
     }
 
-    var asVoxelCoordinates: (Float, Float, Float) {
+    var asSceneCoordinates: (Float, Float, Float) {
         (Float(x), Float(y), Float(z))
     }
 }
 
-enum GridLayer: Hashable {
+nonisolated enum GridLayer: Hashable {
     case wood
     case foliage
 }
 
-struct GrowthNode {
+nonisolated struct GrowthNode {
     typealias NodeID = Int
 
-    let id: NodeID
+    let nodeID: NodeID
+    let blockID: UUID
     let pos: Int3
     let layer: GridLayer
     let blockType: BlockType
-    let parentID: NodeID?
+    let parentNodeID: NodeID?
 }
 
-enum GridMapper {
+nonisolated enum GridMapper {
     static func layer(for blockType: BlockType) -> GridLayer {
         switch blockType {
         case .trunk, .branch:
@@ -45,10 +46,6 @@ enum GridMapper {
     }
 
     static func int3(from block: VoxelBlockData) -> Int3 {
-        Int3(
-            x: Int(block.x.rounded()),
-            y: Int(block.y.rounded()),
-            z: Int(block.z.rounded())
-        )
+        block.pos
     }
 }

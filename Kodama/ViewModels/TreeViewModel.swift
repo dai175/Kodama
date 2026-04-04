@@ -13,7 +13,7 @@ import SwiftData
 @Observable
 final class TreeViewModel {
     private struct StorageKey: Hashable {
-        let positionKey: PositionKey
+        let position: Int3
         let layer: GridLayer
     }
 
@@ -21,7 +21,7 @@ final class TreeViewModel {
 
     private(set) var blocks: [VoxelBlockData] = []
     private(set) var currentTree: BonsaiTree?
-    private let engineSchemaVersion = 2
+    private let engineSchemaVersion = 3
     private let engineSchemaVersionKey = "kodama.engineSchemaVersion"
 
     var isFirstLaunch: Bool {
@@ -98,7 +98,7 @@ final class TreeViewModel {
 
         if let existing = trees.first {
             currentTree = existing
-            blocks = reconstructParentIndices(existing.blocks.map { voxelBlockToData($0) })
+            blocks = existing.blocks.map { voxelBlockToData($0) }
         } else {
             let seed = Int.random(in: 1 ... 999_999)
             let tree = BonsaiTree(seed: seed)
@@ -107,12 +107,12 @@ final class TreeViewModel {
             let saplingBlocks = TreeBuilder.buildSapling(seed: UInt64(seed))
             for blockData in saplingBlocks {
                 let voxelBlock = VoxelBlock(
-                    x: blockData.x,
-                    y: blockData.y,
-                    z: blockData.z,
+                    id: blockData.id,
+                    pos: blockData.pos,
                     blockType: blockData.blockType,
                     colorHex: blockData.colorHex,
-                    source: .autonomous
+                    source: .autonomous,
+                    parentBlockID: blockData.parentID
                 )
                 voxelBlock.tree = tree
                 context.insert(voxelBlock)
@@ -149,14 +149,9 @@ final class TreeViewModel {
             $0.timestamp > tree.lastGrowthEval && $0.timestamp <= currentDate
         }
         let treeBlocks = tree.blocks
-        var treeBlockLookup: [StorageKey: [VoxelBlock]] = [:]
-        for block in treeBlocks {
-            let key = StorageKey(positionKey: block.positionKey, layer: GridMapper.layer(for: block.blockType))
-            treeBlockLookup[key, default: []].append(block)
-        }
+        let treeBlocksByID = Dictionary(uniqueKeysWithValues: treeBlocks.map { ($0.id, $0) })
         let blockDates: [Date?] = blocks.map { block in
-            let key = StorageKey(positionKey: block.positionKey, layer: GridMapper.layer(for: block.blockType))
-            return treeBlockLookup[key]?.first?.placedAt
+            treeBlocksByID[block.id]?.placedAt
         }
         let interactionPayloads = pendingInteractions.map {
             InteractionPayload(
@@ -192,8 +187,8 @@ final class TreeViewModel {
         }
 
         persistBlocks(growthResult.newBlocks, tree: tree, context: context)
-        applySeasonalColorChanges(seasonal.colorChanges, treeBlockLookup: treeBlockLookup)
-        let removedIndices = removeSeasonalBlocks(seasonal, treeBlockLookup: treeBlockLookup, context: context)
+        applySeasonalColorChanges(seasonal.colorChanges, treeBlocksByID: treeBlocksByID)
+        let removedIndices = removeSeasonalBlocks(seasonal, treeBlocksByID: treeBlocksByID, context: context)
 
         persistBlocks(seasonal.newSnowBlocks + seasonal.newMossBlocks, tree: tree, context: context)
         updateTreeState(
@@ -232,20 +227,25 @@ final class TreeViewModel {
         let existing = tree.blocks
         var existingByLayer: [StorageKey: VoxelBlock] = [:]
         for block in existing {
-            let key = StorageKey(positionKey: block.positionKey, layer: GridMapper.layer(for: block.blockType))
+            let key = StorageKey(position: block.pos, layer: GridMapper.layer(for: block.blockType))
             existingByLayer[key] = block
         }
 
         for blockData in blocks {
-            let key = StorageKey(positionKey: blockData.positionKey, layer: GridMapper.layer(for: blockData.blockType))
+            let key = StorageKey(position: blockData.pos, layer: GridMapper.layer(for: blockData.blockType))
             if let existingBlock = existingByLayer[key] {
                 existingBlock.blockType = blockData.blockType
                 existingBlock.colorHex = blockData.colorHex
+                existingBlock.parentBlockID = blockData.parentID
                 existingBlock.placedAt = Date()
             } else {
                 let voxelBlock = VoxelBlock(
-                    x: blockData.x, y: blockData.y, z: blockData.z,
-                    blockType: blockData.blockType, colorHex: blockData.colorHex, source: .autonomous
+                    id: blockData.id,
+                    pos: blockData.pos,
+                    blockType: blockData.blockType,
+                    colorHex: blockData.colorHex,
+                    source: .autonomous,
+                    parentBlockID: blockData.parentID
                 )
                 voxelBlock.tree = tree
                 context.insert(voxelBlock)
@@ -256,14 +256,13 @@ final class TreeViewModel {
 
     private func applySeasonalColorChanges(
         _ changes: [(blockIndex: Int, newColor: String)],
-        treeBlockLookup: [StorageKey: [VoxelBlock]]
+        treeBlocksByID: [UUID: VoxelBlock]
     ) {
         // DB entities only — in-memory update happens in updateInMemoryBlocks after save
         for change in changes {
             guard change.blockIndex < blocks.count else { continue }
             let old = blocks[change.blockIndex]
-            let key = StorageKey(positionKey: old.positionKey, layer: GridMapper.layer(for: old.blockType))
-            if let treeBlock = treeBlockLookup[key]?.first {
+            if let treeBlock = treeBlocksByID[old.id] {
                 treeBlock.colorHex = change.newColor
             }
         }
@@ -271,26 +270,26 @@ final class TreeViewModel {
 
     private func removeSeasonalBlocks(
         _ seasonal: SeasonalResult,
-        treeBlockLookup: [StorageKey: [VoxelBlock]],
+        treeBlocksByID: [UUID: VoxelBlock],
         context: ModelContext
     ) -> Set<Int> {
         let fallenIndices = seasonal.fallenLeaves
         for index in fallenIndices {
-            if let treeBlock = findTreeBlock(at: index, treeBlockLookup: treeBlockLookup) {
+            if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
                 context.delete(treeBlock)
             }
         }
 
         let expiredFlowerIndices = seasonal.expiredFlowers
         for index in expiredFlowerIndices where !fallenIndices.contains(index) {
-            if let treeBlock = findTreeBlock(at: index, treeBlockLookup: treeBlockLookup) {
+            if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
                 context.delete(treeBlock)
             }
         }
 
         let removedSnowIndices = seasonal.removedSnow
         for index in removedSnowIndices {
-            if let treeBlock = findTreeBlock(at: index, treeBlockLookup: treeBlockLookup) {
+            if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
                 context.delete(treeBlock)
             }
         }
@@ -298,11 +297,9 @@ final class TreeViewModel {
         return fallenIndices.union(expiredFlowerIndices).union(removedSnowIndices)
     }
 
-    private func findTreeBlock(at index: Int, treeBlockLookup: [StorageKey: [VoxelBlock]]) -> VoxelBlock? {
+    private func findTreeBlock(at index: Int, treeBlocksByID: [UUID: VoxelBlock]) -> VoxelBlock? {
         guard index < blocks.count else { return nil }
-        let block = blocks[index]
-        let key = StorageKey(positionKey: block.positionKey, layer: GridMapper.layer(for: block.blockType))
-        return treeBlockLookup[key]?.first
+        return treeBlocksByID[blocks[index].id]
     }
 
     private func updateTreeState(
@@ -327,8 +324,11 @@ final class TreeViewModel {
             guard change.blockIndex < blocks.count else { continue }
             let old = blocks[change.blockIndex]
             blocks[change.blockIndex] = VoxelBlockData(
-                x: old.x, y: old.y, z: old.z,
-                blockType: old.blockType, colorHex: change.newColor, parentIndex: old.parentIndex
+                id: old.id,
+                pos: old.pos,
+                blockType: old.blockType,
+                colorHex: change.newColor,
+                parentID: old.parentID
             )
         }
         if !removedIndices.isEmpty {
@@ -337,7 +337,6 @@ final class TreeViewModel {
             }
         }
         blocks += newBlocks + seasonal.newSnowBlocks + seasonal.newMossBlocks
-        blocks = reconstructParentIndices(blocks)
     }
 
     private func ensureEngineCompatibility(context: ModelContext) {
@@ -435,58 +434,13 @@ final class TreeViewModel {
 // MARK: - Block Data Helpers
 
 private extension TreeViewModel {
-    /// Precomputed once: face offsets + diagonal-up offsets for parent reconstruction.
-    static let parentSearchOffsets: [(Float, Float, Float)] = PositionKey.faceOffsets + [
-        (VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
-        (-VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
-        (0, VoxelConstants.blockSize, VoxelConstants.blockSize),
-        (0, VoxelConstants.blockSize, -VoxelConstants.blockSize)
-    ]
-
     func voxelBlockToData(_ block: VoxelBlock) -> VoxelBlockData {
         VoxelBlockData(
-            x: block.x,
-            y: block.y,
-            z: block.z,
+            id: block.id,
+            pos: block.pos,
             blockType: block.blockType,
             colorHex: block.colorHex,
-            parentIndex: nil
+            parentID: block.parentBlockID
         )
-    }
-
-    /// Reconstructs parentIndex relationships from spatial adjacency after DB load.
-    /// Down direction is searched first; trunk/branch neighbors are preferred as parents.
-    /// Includes diagonal-up neighbors so downward-sloping branches keep their parent link.
-    func reconstructParentIndices(_ inputBlocks: [VoxelBlockData]) -> [VoxelBlockData] {
-        var woodPositionToIndex = [PositionKey: Int](minimumCapacity: inputBlocks.count)
-        for (i, block) in inputBlocks.enumerated() {
-            if GridMapper.layer(for: block.blockType) == .wood {
-                woodPositionToIndex[block.positionKey] = i
-            }
-        }
-
-        return inputBlocks.enumerated().map { i, block in
-            if block.blockType == .trunk, block.y == 0 {
-                return block
-            }
-
-            var bestIndex: Int?
-            for offset in Self.parentSearchOffsets {
-                let neighborKey = PositionKey(x: block.x + offset.0, y: block.y + offset.1, z: block.z + offset.2)
-                guard let neighborIndex = woodPositionToIndex[neighborKey], neighborIndex != i else { continue }
-                let neighbor = inputBlocks[neighborIndex]
-                if neighbor.blockType == .trunk || neighbor.blockType == .branch {
-                    bestIndex = neighborIndex
-                    break
-                }
-            }
-
-            guard let parentIndex = bestIndex else { return block }
-            return VoxelBlockData(
-                x: block.x, y: block.y, z: block.z,
-                blockType: block.blockType, colorHex: block.colorHex,
-                parentIndex: parentIndex
-            )
-        }
     }
 }

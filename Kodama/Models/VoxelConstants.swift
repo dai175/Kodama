@@ -5,7 +5,7 @@
 
 import CoreGraphics
 
-enum VoxelConstants {
+nonisolated enum VoxelConstants {
     static let blockSize: Float = 1.0
     static let renderScale: Float = 0.25
     static let halfBlock: Float = blockSize / 2
