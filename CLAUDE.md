@@ -14,11 +14,11 @@ Voxel bonsai tree iOS app. Tree grows autonomously over real-world time with use
 
 ```bash
 # Build
-xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' build
+xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 17' build
 
 # Test
 # During prototyping, run internal logic tests only by default.
-xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:KodamaTests test
+xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:KodamaTests test
 
 # Lint
 swiftlint
