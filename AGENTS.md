@@ -23,10 +23,10 @@
 
 ```bash
 # Build
-xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' build
+xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 17' build
 
 # Test
-xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 16' -only-testing:KodamaTests test
+xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:KodamaTests test
 ```
 
 ## Test Policy
