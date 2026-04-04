@@ -23,6 +23,7 @@ final class BonsaiScene {
 
     private let rotationNode: SCNNode
     private let rotationAction: SCNAction
+    private let cameraTargetNode: SCNNode
     private var idleTimer: Timer?
 
     // MARK: - Initialization
@@ -32,6 +33,7 @@ final class BonsaiScene {
         cameraNode = SCNNode()
         treeAnchor = SCNNode()
         rotationNode = SCNNode()
+        cameraTargetNode = SCNNode()
         rotationAction = SCNAction.repeatForever(
             SCNAction.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 1080)
         )
@@ -90,21 +92,20 @@ final class BonsaiScene {
 
     private func setupCamera() {
         let camera = SCNCamera()
-        camera.fieldOfView = 45
+        camera.fieldOfView = 40
         camera.zNear = 0.1
         camera.zFar = 100
 
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 4, 10)
+        cameraNode.position = defaultCameraPosition
 
         let lookAtConstraint = SCNLookAtConstraint(target: nil)
         lookAtConstraint.isGimbalLockEnabled = true
 
-        let targetNode = SCNNode()
-        targetNode.position = SCNVector3(0, 2.5, 0)
-        scene.rootNode.addChildNode(targetNode)
+        cameraTargetNode.position = SCNVector3(0, 2.1, 0)
+        scene.rootNode.addChildNode(cameraTargetNode)
 
-        lookAtConstraint.target = targetNode
+        lookAtConstraint.target = cameraTargetNode
         cameraNode.constraints = [lookAtConstraint]
 
         scene.rootNode.addChildNode(cameraNode)
@@ -164,20 +165,23 @@ final class BonsaiScene {
 
         // Layer definitions: (outerRadius, innerRadius)
         let layers: [(Float, Float)] = [
-            (1.5, 0.0), // Y=0 bottom, solid
-            (2.0, 1.0), // Y=1
-            (2.5, 1.5), // Y=2
-            (3.0, 2.0), // Y=3
-            (3.5, 2.5) // Y=4 rim
+            (2.0, 0.0),
+            (2.6, 1.0),
+            (3.2, 1.8),
+            (3.8, 2.6),
+            (4.4, 3.2),
+            (4.9, 3.8),
+            (5.3, 4.3)
         ]
+        let maxGridRange = Int(ceil(layers.map(\.0).max() ?? 0))
 
         for (yLayer, (outerRadius, innerRadius)) in layers.enumerated() {
             let yPos = Float(yLayer) * bs
             let isRim = yLayer == layers.count - 1
             let isBottom = yLayer == 0
 
-            for bx in -4 ... 4 {
-                for bz in -4 ... 4 {
+            for bx in -maxGridRange ... maxGridRange {
+                for bz in -maxGridRange ... maxGridRange {
                     let dist = sqrt(Float(bx * bx + bz * bz))
                     let inOuter = dist <= outerRadius
                     let inInner = dist <= innerRadius
@@ -240,5 +244,9 @@ final class BonsaiScene {
         guard !isAutoRotating else { return }
         isAutoRotating = true
         rotationNode.runAction(rotationAction, forKey: "autoRotate")
+    }
+
+    var defaultCameraPosition: SCNVector3 {
+        SCNVector3(0, 4.6, 12.5)
     }
 }
