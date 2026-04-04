@@ -84,7 +84,7 @@ final class TreeViewModel {
 
         if let existing = trees.first {
             currentTree = existing
-            blocks = existing.blocks.map { voxelBlockToData($0) }
+            blocks = reconstructParentIndices(existing.blocks.map { voxelBlockToData($0) })
         } else {
             let seed = Int.random(in: 1 ... 999_999)
             let tree = BonsaiTree(seed: seed)
@@ -271,6 +271,7 @@ final class TreeViewModel {
             blocks = blocks.enumerated().compactMap { index, block in
                 removedIndices.contains(index) ? nil : block
             }
+            blocks = reconstructParentIndices(blocks)
         }
         blocks += newBlocks + seasonal.newSnowBlocks + seasonal.newMossBlocks
     }
@@ -296,5 +297,48 @@ final class TreeViewModel {
             colorHex: block.colorHex,
             parentIndex: nil
         )
+    }
+
+    /// Reconstructs parentIndex relationships from spatial adjacency after DB load.
+    /// Down direction is searched first; trunk/branch neighbors are preferred as parents.
+    private func reconstructParentIndices(_ inputBlocks: [VoxelBlockData]) -> [VoxelBlockData] {
+        var positionToIndex = [PositionKey: Int](minimumCapacity: inputBlocks.count)
+        for (i, block) in inputBlocks.enumerated() {
+            positionToIndex[block.positionKey] = i
+        }
+
+        let faceOffsets: [(Float, Float, Float)] = [
+            (0, -1, 0), // down first — most natural parent direction
+            (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1)
+        ]
+
+        return inputBlocks.enumerated().map { i, block in
+            // Root trunk blocks (y == 0) have no parent
+            if block.blockType == .trunk, block.y == 0 {
+                return block
+            }
+
+            // Find the best face-adjacent neighbor to serve as parent
+            var bestIndex: Int?
+            for offset in faceOffsets {
+                let neighborKey = PositionKey(x: block.x + offset.0, y: block.y + offset.1, z: block.z + offset.2)
+                guard let neighborIndex = positionToIndex[neighborKey], neighborIndex != i else { continue }
+                let neighbor = inputBlocks[neighborIndex]
+                // Prefer trunk/branch as parent; take first match for other types
+                if bestIndex == nil {
+                    bestIndex = neighborIndex
+                } else if neighbor.blockType == .trunk || neighbor.blockType == .branch {
+                    bestIndex = neighborIndex
+                    break
+                }
+            }
+
+            guard let parentIndex = bestIndex else { return block }
+            return VoxelBlockData(
+                x: block.x, y: block.y, z: block.z,
+                blockType: block.blockType, colorHex: block.colorHex,
+                parentIndex: parentIndex
+            )
+        }
     }
 }
