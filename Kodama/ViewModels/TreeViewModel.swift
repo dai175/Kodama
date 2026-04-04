@@ -271,9 +271,11 @@ final class TreeViewModel {
             blocks = blocks.enumerated().compactMap { index, block in
                 removedIndices.contains(index) ? nil : block
             }
-            blocks = reconstructParentIndices(blocks)
         }
         blocks += newBlocks + seasonal.newSnowBlocks + seasonal.newMossBlocks
+        if !removedIndices.isEmpty {
+            blocks = reconstructParentIndices(blocks)
+        }
     }
 
     private func animateNewNodes(renderer: BonsaiRenderer, count: Int) {
@@ -307,29 +309,21 @@ final class TreeViewModel {
             positionToIndex[block.positionKey] = i
         }
 
-        let faceOffsets: [(Float, Float, Float)] = [
-            (0, -1, 0), // down first — most natural parent direction
-            (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1)
-        ]
-
         return inputBlocks.enumerated().map { i, block in
-            // Root trunk blocks (y == 0) have no parent
             if block.blockType == .trunk, block.y == 0 {
                 return block
             }
 
-            // Find the best face-adjacent neighbor to serve as parent
             var bestIndex: Int?
-            for offset in faceOffsets {
+            for offset in PositionKey.faceOffsets {
                 let neighborKey = PositionKey(x: block.x + offset.0, y: block.y + offset.1, z: block.z + offset.2)
                 guard let neighborIndex = positionToIndex[neighborKey], neighborIndex != i else { continue }
                 let neighbor = inputBlocks[neighborIndex]
-                // Prefer trunk/branch as parent; take first match for other types
-                if bestIndex == nil {
-                    bestIndex = neighborIndex
-                } else if neighbor.blockType == .trunk || neighbor.blockType == .branch {
+                if neighbor.blockType == .trunk || neighbor.blockType == .branch {
                     bestIndex = neighborIndex
                     break
+                } else if bestIndex == nil {
+                    bestIndex = neighborIndex
                 }
             }
 
