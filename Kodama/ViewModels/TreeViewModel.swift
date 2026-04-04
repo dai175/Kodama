@@ -319,10 +319,10 @@ final class TreeViewModel {
                 let neighborKey = PositionKey(x: block.x + offset.0, y: block.y + offset.1, z: block.z + offset.2)
                 guard let neighborIndex = positionToIndex[neighborKey], neighborIndex != i else { continue }
                 let neighbor = inputBlocks[neighborIndex]
-                if neighbor.blockType == .trunk || neighbor.blockType == .branch {
+                if neighbor.blockType == .trunk || neighbor.blockType == .branch || neighbor.blockType == .flower {
                     bestIndex = neighborIndex
                     break
-                } else if bestIndex == nil {
+                } else if bestIndex == nil, neighbor.blockType != .moss, neighbor.blockType != .snow {
                     bestIndex = neighborIndex
                 }
             }
