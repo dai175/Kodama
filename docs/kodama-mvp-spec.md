@@ -89,9 +89,9 @@ For full v2+ details, see Section 14 of `kodama-concept.md`.
 | timestamp | Date | When interaction occurred |
 | type | InteractionType | open, touch, color, word |
 | value | String? | Color hex or word text |
-| touchX | Float? | Touch position X in scene |
-| touchY | Float? | Touch position Y in scene |
-| touchZ | Float? | Touch position Z in scene |
+| touchX | Int? | Touch position X in logical grid |
+| touchY | Int? | Touch position Y in logical grid |
+| touchZ | Int? | Touch position Z in logical grid |
 
 ### Enums
 

@@ -21,7 +21,7 @@ final class TreeViewModel {
 
     private(set) var blocks: [VoxelBlockData] = []
     private(set) var currentTree: BonsaiTree?
-    private let engineSchemaVersion = 3
+    private let engineSchemaVersion = 4
     private let engineSchemaVersionKey = "kodama.engineSchemaVersion"
 
     var isFirstLaunch: Bool {
@@ -32,10 +32,10 @@ final class TreeViewModel {
 
     func handleTouch(position: SCNVector3, context: ModelContext) {
         guard let tree = currentTree else { return }
-        let logicalTouch = SCNVector3(
-            (position.x / VoxelConstants.renderScale).rounded(),
-            (position.y / VoxelConstants.renderScale).rounded(),
-            (position.z / VoxelConstants.renderScale).rounded()
+        let logicalTouch = Int3(
+            x: Int((position.x / VoxelConstants.renderScale).rounded()),
+            y: Int((position.y / VoxelConstants.renderScale).rounded()),
+            z: Int((position.z / VoxelConstants.renderScale).rounded())
         )
         let interaction = Interaction(
             type: .touch,
