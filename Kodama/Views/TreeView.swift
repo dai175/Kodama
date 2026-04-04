@@ -52,15 +52,24 @@ struct TreeView: View {
             #if DEBUG
                 SettingsView(
                     onTreeReset: handleTreeReset,
-                    onTimeTravel: { days in
+                    onTimeTravel: { component, value in
                         guard let bonsaiRenderer = renderer else {
                             print("[TimeTravel] ABORT: renderer is nil")
                             return
                         }
-                        viewModel.timeTravel(days: days, context: modelContext, renderer: bonsaiRenderer)
+                        viewModel.timeTravel(
+                            component: component,
+                            value: value,
+                            context: modelContext,
+                            renderer: bonsaiRenderer
+                        )
                     },
                     debugTreeInfo: viewModel.currentTree.map {
-                        (totalBlocks: $0.totalBlocks, createdAt: $0.createdAt)
+                        (
+                            totalBlocks: $0.totalBlocks,
+                            createdAt: $0.createdAt,
+                            lastGrowthEval: $0.lastGrowthEval
+                        )
                     }
                 )
             #else

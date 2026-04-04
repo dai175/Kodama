@@ -12,8 +12,8 @@ struct SettingsView: View {
 
     var onTreeReset: () -> Void = {}
     #if DEBUG
-        var onTimeTravel: ((Int) -> Void)?
-        var debugTreeInfo: (totalBlocks: Int, createdAt: Date)?
+        var onTimeTravel: ((Calendar.Component, Int) -> Void)?
+        var debugTreeInfo: (totalBlocks: Int, createdAt: Date, lastGrowthEval: Date)?
     #endif
 
     @State private var showResetFirstAlert = false
@@ -78,14 +78,14 @@ struct SettingsView: View {
                 Text(appVersionLabel)
                     .foregroundStyle(Color.softWhite.opacity(0.4))
             }
-            .listRowBackground(Color.white.opacity(0.05))
+            .listRowBackground(Color.softWhite.opacity(0.05))
 
             HStack {
                 Text("by focuswave")
                     .foregroundStyle(Color.softWhite.opacity(0.5))
                     .font(.system(size: 14, weight: .light))
             }
-            .listRowBackground(Color.white.opacity(0.05))
+            .listRowBackground(Color.softWhite.opacity(0.05))
         } header: {
             Text("About")
                 .foregroundStyle(Color.softWhite.opacity(0.4))
@@ -102,7 +102,7 @@ struct SettingsView: View {
                 Text("Reset Tree")
                     .foregroundStyle(.red.opacity(0.8))
             }
-            .listRowBackground(Color.white.opacity(0.05))
+            .listRowBackground(Color.softWhite.opacity(0.05))
         } header: {
             Text("Data")
                 .foregroundStyle(Color.softWhite.opacity(0.4))
@@ -116,8 +116,13 @@ struct SettingsView: View {
         private var debugSection: some View {
             Section {
                 if let info = debugTreeInfo {
-                    let daysSincePlanted = Calendar.current.dateComponents([.day], from: info.createdAt, to: Date())
-                        .day ?? 0
+                    let virtualDate = info.lastGrowthEval
+                    let daysSincePlanted = Calendar.current.dateComponents(
+                        [.day],
+                        from: info.createdAt,
+                        to: virtualDate
+                    )
+                    .day ?? 0
                     HStack {
                         Text("Total Blocks")
                             .foregroundStyle(Color.softWhite.opacity(0.8))
@@ -125,7 +130,7 @@ struct SettingsView: View {
                         Text("\(info.totalBlocks)")
                             .foregroundStyle(Color.softWhite.opacity(0.5))
                     }
-                    .listRowBackground(Color.white.opacity(0.05))
+                    .listRowBackground(Color.softWhite.opacity(0.05))
 
                     HStack {
                         Text("Days Since Planted")
@@ -134,17 +139,17 @@ struct SettingsView: View {
                         Text("\(daysSincePlanted) days")
                             .foregroundStyle(Color.softWhite.opacity(0.5))
                     }
-                    .listRowBackground(Color.white.opacity(0.05))
+                    .listRowBackground(Color.softWhite.opacity(0.05))
                 }
 
                 HStack {
                     Text("Current Season")
                         .foregroundStyle(Color.softWhite.opacity(0.8))
                     Spacer()
-                    Text(Season.current().rawValue.capitalized)
+                    Text(Season.current(from: debugTreeInfo?.lastGrowthEval ?? Date()).rawValue.capitalized)
                         .foregroundStyle(Color.softWhite.opacity(0.5))
                 }
-                .listRowBackground(Color.white.opacity(0.05))
+                .listRowBackground(Color.softWhite.opacity(0.05))
 
                 Picker("Override Season", selection: $seasonOverride) {
                     Text("None").tag(Season?.none)
@@ -153,7 +158,7 @@ struct SettingsView: View {
                     }
                 }
                 .foregroundStyle(Color.softWhite.opacity(0.8))
-                .listRowBackground(Color.white.opacity(0.05))
+                .listRowBackground(Color.softWhite.opacity(0.05))
                 .onChange(of: seasonOverride) {
                     Season.debugOverride = seasonOverride
                 }
@@ -164,20 +169,20 @@ struct SettingsView: View {
 
             Section {
                 ForEach([
-                    (label: "+1 Day", days: 1),
-                    (label: "+1 Week", days: 7),
-                    (label: "+1 Month", days: 30),
-                    (label: "+3 Months", days: 90),
-                    (label: "+6 Months", days: 180)
-                ], id: \.days) { item in
+                    (label: "+1 Day", component: Calendar.Component.day, value: 1),
+                    (label: "+1 Week", component: Calendar.Component.day, value: 7),
+                    (label: "+1 Month", component: Calendar.Component.month, value: 1),
+                    (label: "+3 Months", component: Calendar.Component.month, value: 3),
+                    (label: "+6 Months", component: Calendar.Component.month, value: 6)
+                ], id: \.label) { item in
                     Button {
-                        onTimeTravel?(item.days)
+                        onTimeTravel?(item.component, item.value)
                         dismiss()
                     } label: {
                         Text(item.label)
                             .foregroundStyle(Color.softWhite.opacity(0.8))
                     }
-                    .listRowBackground(Color.white.opacity(0.05))
+                    .listRowBackground(Color.softWhite.opacity(0.05))
                 }
             } header: {
                 Text("Time Travel")
