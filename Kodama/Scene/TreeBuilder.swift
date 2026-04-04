@@ -67,6 +67,14 @@ nonisolated struct SeededRandom: RandomNumberGenerator {
 // MARK: - TreeBuilder
 
 enum TreeBuilder {
+    private struct TrunkLayout {
+        let pathIndices: [Int]
+
+        var topIndex: Int {
+            pathIndices[pathIndices.count - 1]
+        }
+    }
+
     // MARK: - Color Palettes
 
     static let trunkColors = ["#4A3520", "#3D2E1C", "#553D28"]
@@ -80,7 +88,7 @@ enum TreeBuilder {
         var blocks: [VoxelBlockData] = []
         var occupiedPositions: Set<PositionKey> = []
 
-        let topCenterIndex = buildTrunk(
+        let trunkLayout = buildTrunk(
             blocks: &blocks,
             occupiedPositions: &occupiedPositions,
             rng: &rng
@@ -89,42 +97,41 @@ enum TreeBuilder {
             blocks: &blocks,
             occupiedPositions: &occupiedPositions,
             rng: &rng,
-            topIndex: topCenterIndex
+            trunkLayout: trunkLayout
         )
         buildCrownLeaf(
             blocks: &blocks,
             occupiedPositions: &occupiedPositions,
             rng: &rng,
-            topIndex: topCenterIndex
+            topIndex: trunkLayout.topIndex
         )
 
         return blocks
     }
 
-    @discardableResult
     private static func buildTrunk(
         blocks: inout [VoxelBlockData],
         occupiedPositions: inout Set<PositionKey>,
         rng: inout SeededRandom
-    ) -> Int {
+    ) -> TrunkLayout {
         let blockSize = VoxelConstants.blockSize
-        let height = 4 + Int(rng.next() % 2) // 4-5 blocks tall
-        let bendDirection: (Float, Float) = {
-            let directions: [(Float, Float)] = [
-                (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
-            ]
-            return directions[Int(rng.next() % UInt64(directions.count))]
-        }()
+        let height = 5 + Int(rng.next() % 2)
+        let bendDirections = shuffledDirections(using: &rng)
         let bendStart = 2 + Int(rng.next() % 2)
+        let secondBendStart = bendStart + 1 + Int(rng.next() % 2)
 
         var currentX: Float = 0
         var currentZ: Float = 0
+        var pathIndices: [Int] = []
 
         for yIdx in 0 ..< height {
             let parentIdx = yIdx > 0 ? blocks.count - 1 : nil
-            if yIdx >= bendStart {
-                currentX += bendDirection.0
-                currentZ += bendDirection.1
+            if yIdx == bendStart {
+                currentX += bendDirections[0].0
+                currentZ += bendDirections[0].1
+            } else if yIdx == secondBendStart {
+                currentX += bendDirections[1].0
+                currentZ += bendDirections[1].1
             }
             let color = trunkColors[Int(rng.next() % UInt64(trunkColors.count))]
             let block = VoxelBlockData(
@@ -137,32 +144,44 @@ enum TreeBuilder {
             )
             blocks.append(block)
             occupiedPositions.insert(block.positionKey)
+            pathIndices.append(blocks.count - 1)
+
+            if yIdx == 0 {
+                addTrunkSupports(
+                    around: block,
+                    parentIndex: blocks.count - 1,
+                    directions: Array(bendDirections.prefix(2)),
+                    blocks: &blocks,
+                    occupiedPositions: &occupiedPositions,
+                    rng: &rng
+                )
+            }
         }
 
-        return blocks.count - 1
+        return TrunkLayout(pathIndices: pathIndices)
     }
 
     private static func buildBranches(
         blocks: inout [VoxelBlockData],
         occupiedPositions: inout Set<PositionKey>,
         rng: inout SeededRandom,
-        topIndex: Int
+        trunkLayout: TrunkLayout
     ) {
         let blockSize = VoxelConstants.blockSize
-        let directions: [(Float, Float)] = [
-            (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
-        ]
-
-        var availableDirections = directions
+        let startRange = max(1, trunkLayout.pathIndices.count / 2)
+        var availableDirections = shuffledDirections(using: &rng)
         let branchCount = min(2 + Int(rng.next() % 2), availableDirections.count)
 
         for branchIndex in 0 ..< branchCount {
-            let directionIndex = Int(rng.next() % UInt64(availableDirections.count))
-            let dir = availableDirections.remove(at: directionIndex)
+            let dir = availableDirections.removeFirst()
             let branchColor = branchColors[Int(rng.next() % UInt64(branchColors.count))]
-            let branchLength = 3 + Int(rng.next() % 2)
-            let trunkLevel = max(1, min(topIndex - branchIndex, topIndex))
-            let originParentIdx = trunkLevel
+            let branchLength = 5 + Int(rng.next() % 2)
+            let trunkPathIndex = min(
+                startRange + branchIndex + Int(rng.next() % 2),
+                trunkLayout.pathIndices.count - 1
+            )
+            let originParentIdx = trunkLayout.pathIndices[trunkPathIndex]
+            let lateralDirection = availableDirections.first ?? (-dir.1, dir.0)
 
             var curX = blocks[originParentIdx].x
             var curY = blocks[originParentIdx].y
@@ -170,11 +189,21 @@ enum TreeBuilder {
             var prevIdx = originParentIdx
 
             for step in 0 ..< branchLength {
-                curX += dir.0
-                curZ += dir.1
-                if step > 0 {
-                    curY += blockSize
+                let movement: (Float, Float, Float) = switch step {
+                case 0:
+                    (dir.0, 0, dir.1)
+                case 1:
+                    (0, blockSize, 0)
+                case 2:
+                    (dir.0, 0, dir.1)
+                default:
+                    step.isMultiple(of: 2)
+                        ? (0, blockSize, 0)
+                        : (lateralDirection.0, 0, lateralDirection.1)
                 }
+                curX += movement.0
+                curY += movement.1
+                curZ += movement.2
 
                 let block = VoxelBlockData(
                     x: curX,
@@ -187,22 +216,24 @@ enum TreeBuilder {
                 guard insert(block, into: &blocks, occupiedPositions: &occupiedPositions) else { continue }
                 prevIdx = blocks.count - 1
 
-                if step >= 1 {
-                    addIntermediateFoliage(
-                        around: prevIdx,
-                        blocks: &blocks,
-                        occupiedPositions: &occupiedPositions,
-                        rng: &rng,
-                        upwardBias: step == branchLength - 1
-                    )
-                }
+                addIntermediateFoliage(
+                    around: prevIdx,
+                    branchDirection: movement.1 > 0 ? dir : (movement.0, movement.2),
+                    blocks: &blocks,
+                    occupiedPositions: &occupiedPositions,
+                    rng: &rng,
+                    density: step == branchLength - 1 ? .medium : .barelyThere,
+                    upwardBias: step >= branchLength - 2,
+                    isTerminal: false
+                )
             }
 
             buildBranchLeaves(
                 blocks: &blocks,
                 occupiedPositions: &occupiedPositions,
                 rng: &rng,
-                topIndex: prevIdx
+                topIndex: prevIdx,
+                branchDirection: dir
             )
         }
     }
@@ -211,45 +242,84 @@ enum TreeBuilder {
         blocks: inout [VoxelBlockData],
         occupiedPositions: inout Set<PositionKey>,
         rng: inout SeededRandom,
-        topIndex: Int
+        topIndex: Int,
+        branchDirection: (Float, Float)
     ) {
         addIntermediateFoliage(
             around: topIndex,
+            branchDirection: branchDirection,
             blocks: &blocks,
             occupiedPositions: &occupiedPositions,
             rng: &rng,
-            upwardBias: true
+            density: .medium,
+            upwardBias: true,
+            isTerminal: true
         )
+    }
+
+    private enum FoliageDensity {
+        case barelyThere
+        case sparse
+        case medium
     }
 
     private static func addIntermediateFoliage(
         around index: Int,
+        branchDirection: (Float, Float),
         blocks: inout [VoxelBlockData],
         occupiedPositions: inout Set<PositionKey>,
         rng: inout SeededRandom,
-        upwardBias: Bool
+        density: FoliageDensity,
+        upwardBias: Bool,
+        isTerminal: Bool
     ) {
         let blockSize = VoxelConstants.blockSize
         let anchor = blocks[index]
+        let lateralDirection = (-branchDirection.1, branchDirection.0)
+
+        if density == .barelyThere, !isTerminal {
+            return
+        }
+        if density == .sparse, !isTerminal, !rng.next().isMultiple(of: 5) {
+            return
+        }
 
         var candidateOffsets: [(Float, Float, Float)] = [
             (0, blockSize, 0),
-            (blockSize, blockSize, 0),
-            (-blockSize, blockSize, 0),
-            (0, blockSize, blockSize),
-            (0, blockSize, -blockSize),
-            (blockSize, 0, 0),
-            (-blockSize, 0, 0),
-            (0, 0, blockSize),
-            (0, 0, -blockSize)
+            (lateralDirection.0, 0, lateralDirection.1),
+            (-lateralDirection.0, 0, -lateralDirection.1),
+            (branchDirection.0, 0, branchDirection.1),
+            (-branchDirection.0, 0, -branchDirection.1)
         ]
         if upwardBias {
-            candidateOffsets.append(contentsOf: [
-                (blockSize, blockSize, blockSize),
-                (-blockSize, blockSize, -blockSize)
-            ])
+            let upwardOffsets: [(Float, Float, Float)] = [
+                (0, blockSize, 0),
+                (lateralDirection.0, 0, lateralDirection.1),
+                (branchDirection.0, 0, branchDirection.1)
+            ]
+            candidateOffsets.append(contentsOf: upwardOffsets)
         }
-        let clusterSize = upwardBias ? 4 + Int(rng.next() % 3) : 2 + Int(rng.next() % 2)
+        if isTerminal {
+            let terminalOffsets: [(Float, Float, Float)] = [
+                (-lateralDirection.0, 0, -lateralDirection.1),
+                (-branchDirection.0, 0, -branchDirection.1)
+            ]
+            candidateOffsets.append(contentsOf: terminalOffsets)
+        }
+        let clusterSize = if isTerminal {
+            switch density {
+            case .medium:
+                2 + Int(rng.next() % 2)
+            case .sparse:
+                2
+            case .barelyThere:
+                1
+            }
+        } else if upwardBias {
+            density == .medium ? 1 + Int(rng.next() % 2) : 1
+        } else {
+            1
+        }
 
         for offset in candidateOffsets.shuffled(using: &rng).prefix(clusterSize) {
             let leafColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
@@ -275,8 +345,40 @@ enum TreeBuilder {
             blocks: &blocks,
             occupiedPositions: &occupiedPositions,
             rng: &rng,
-            topIndex: topIndex
+            topIndex: topIndex,
+            branchDirection: (0, VoxelConstants.blockSize)
         )
+    }
+
+    private static func addTrunkSupports(
+        around anchor: VoxelBlockData,
+        parentIndex: Int,
+        directions: [(Float, Float)],
+        blocks: inout [VoxelBlockData],
+        occupiedPositions: inout Set<PositionKey>,
+        rng: inout SeededRandom
+    ) {
+        let supportCount = 1 + Int(rng.next() % 2)
+
+        for direction in directions.prefix(supportCount) {
+            let block = VoxelBlockData(
+                x: anchor.x + direction.0,
+                y: anchor.y,
+                z: anchor.z + direction.1,
+                blockType: .trunk,
+                colorHex: trunkColors[Int(rng.next() % UInt64(trunkColors.count))],
+                parentIndex: parentIndex
+            )
+            _ = insert(block, into: &blocks, occupiedPositions: &occupiedPositions)
+        }
+    }
+
+    private static func shuffledDirections(using rng: inout SeededRandom) -> [(Float, Float)] {
+        let blockSize = VoxelConstants.blockSize
+        let directions: [(Float, Float)] = [
+            (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
+        ]
+        return directions.shuffled(using: &rng)
     }
 
     private static func insert(

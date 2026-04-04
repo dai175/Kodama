@@ -5,12 +5,12 @@
 //  Created by Daisuke Ooba on 2026/04/02.
 //
 
-@testable import Kodama
 import Foundation
 import Testing
+@testable import Kodama
 
 struct KodamaTests {
-    @Test func saplingGenerationProducesDenserNonOverlappingSeedlings() {
+    @Test func saplingGenerationProducesShapedNonOverlappingSeedlings() {
         for seed in 1 ... 8 {
             let blocks = TreeBuilder.buildSapling(seed: UInt64(seed))
             let trunkBlocks = blocks.filter { $0.blockType == .trunk }
@@ -18,12 +18,36 @@ struct KodamaTests {
             let foliageBlocks = blocks.filter { $0.blockType == .leaf || $0.blockType == .flower }
             let branchParentIndices = Set(branchBlocks.compactMap(\.parentIndex))
             let foliageParentIndices = Set(foliageBlocks.compactMap(\.parentIndex))
+            let branchParents = foliageParentIndices.compactMap { parentIndex in
+                blocks.indices.contains(parentIndex) ? blocks[parentIndex] : nil
+            }
+            let branchVectors = branchBlocks.compactMap { block -> (Float, Float, Float)? in
+                guard let parentIndex = block.parentIndex, blocks.indices.contains(parentIndex) else { return nil }
+                let parent = blocks[parentIndex]
+                return (block.x - parent.x, block.y - parent.y, block.z - parent.z)
+            }
+            let foliageVectors = foliageBlocks.compactMap { block -> (Float, Float, Float)? in
+                guard let parentIndex = block.parentIndex, blocks.indices.contains(parentIndex) else { return nil }
+                let parent = blocks[parentIndex]
+                return (block.x - parent.x, block.y - parent.y, block.z - parent.z)
+            }
 
-            #expect((4 ... 5).contains(trunkBlocks.count))
+            #expect((6 ... 8).contains(trunkBlocks.count))
             #expect(branchBlocks.count >= 6)
             #expect(foliageBlocks.count >= 10)
             #expect(Set(blocks.map(\.positionKey)).count == blocks.count)
             #expect(foliageParentIndices.intersection(branchParentIndices).count >= 2)
+            #expect(Set(trunkBlocks.map(\.x)).count > 1 || Set(trunkBlocks.map(\.z)).count > 1)
+            #expect(branchVectors.allSatisfy(isFaceAdjacent))
+            #expect(foliageVectors.allSatisfy(isFaceAdjacent))
+            #expect(branchVectors.contains { $0.1 > 0 })
+            #expect(branchVectors.contains { abs($0.0) > 0 || abs($0.2) > 0 })
+            #expect(branchParents.contains { branchParent in
+                guard let parentIndex = branchParent.parentIndex,
+                      blocks.indices.contains(parentIndex)
+                else { return false }
+                return blocks[parentIndex].blockType == .branch
+            })
         }
     }
 
@@ -123,4 +147,12 @@ private func makeBranchingTree() -> [VoxelBlockData] {
         VoxelBlockData(x: bs, y: bs, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: 1),
         VoxelBlockData(x: bs * 2, y: bs, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: 3)
     ]
+}
+
+private func isFaceAdjacent(_ vector: (Float, Float, Float)) -> Bool {
+    let unit = VoxelConstants.blockSize
+    let components = [abs(vector.0), abs(vector.1), abs(vector.2)]
+    let movedComponents = components.filter { abs($0 - unit) < 0.0001 }
+    let zeroComponents = components.filter { $0 < 0.0001 }
+    return movedComponents.count == 1 && zeroComponents.count == 2
 }
