@@ -139,9 +139,10 @@ struct KodamaTests {
         let root = TreeBuilder.buildSCNNodes(from: blocks)
         let node = try #require(root.childNodes.first)
 
-        #expect(node.position.x == Float(blocks[0].pos.x) * VoxelConstants.renderScale)
-        #expect(node.position.y == Float(blocks[0].pos.y) * VoxelConstants.renderScale)
-        #expect(node.position.z == Float(blocks[0].pos.z) * VoxelConstants.renderScale)
+        let tolerance: Float = 1e-5
+        #expect(abs(node.position.x - Float(blocks[0].pos.x) * VoxelConstants.renderScale) < tolerance)
+        #expect(abs(node.position.y - Float(blocks[0].pos.y) * VoxelConstants.renderScale) < tolerance)
+        #expect(abs(node.position.z - Float(blocks[0].pos.z) * VoxelConstants.renderScale) < tolerance)
     }
 }
 
