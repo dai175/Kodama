@@ -120,12 +120,11 @@ enum TreeBuilder {
         let branchLength = 1 + Int(rng.next() % 2) // 1-2 blocks
 
         // Branch origin: yIdx 1 (middle of a 2-3 block trunk)
-        let originYIdx = 1
-        let originY = Float(originYIdx) * blockSize
+        let originY = blockSize
 
         var originParentIdx = topIndex
         for (i, candidate) in blocks.enumerated() {
-            if abs(candidate.x) < 0.001, abs(candidate.z) < 0.001, abs(candidate.y - originY) < 0.001 {
+            if candidate.overlaps(x: 0, y: originY, z: 0) {
                 originParentIdx = i
                 break
             }
@@ -156,13 +155,12 @@ enum TreeBuilder {
             prevIdx = stepIdx
         }
 
-        buildBranchLeaves(blocks: &blocks, rng: &rng, dir: dir, topIndex: prevIdx)
+        buildBranchLeaves(blocks: &blocks, rng: &rng, topIndex: prevIdx)
     }
 
     private static func buildBranchLeaves(
         blocks: inout [VoxelBlockData],
         rng: inout SeededRandom,
-        dir _: (Float, Float),
         topIndex: Int
     ) {
         let blockSize = VoxelConstants.blockSize
