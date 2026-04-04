@@ -81,7 +81,7 @@ struct KodamaTests {
             }
             let parent = allBlocks[parentIndex]
             #expect(parent.blockType == .branch)
-            #expect(branchDistance(from: parentIndex, in: allBlocks) >= 2)
+            #expect(GrowthEngine.branchDistanceFromTrunk(startingAt: parentIndex, allBlocks: allBlocks) >= 2)
             #expect(block.y >= parent.y)
         }
     }
@@ -108,20 +108,3 @@ private func makeBranchingTree() -> [VoxelBlockData] {
     ]
 }
 
-private func branchDistance(from index: Int, in blocks: [VoxelBlockData]) -> Int {
-    var distance = 0
-    var currentIndex: Int? = index
-
-    while let resolvedIndex = currentIndex {
-        let block = blocks[resolvedIndex]
-        if block.blockType == .trunk {
-            return distance
-        }
-        if block.blockType == .branch {
-            distance += 1
-        }
-        currentIndex = block.parentIndex
-    }
-
-    return distance
-}

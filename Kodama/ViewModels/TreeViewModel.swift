@@ -338,6 +338,14 @@ final class TreeViewModel {
 // MARK: - Block Data Helpers
 
 private extension TreeViewModel {
+    /// Precomputed once: face offsets + diagonal-up offsets for parent reconstruction.
+    static let parentSearchOffsets: [(Float, Float, Float)] = PositionKey.faceOffsets + [
+        (VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
+        (-VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
+        (0, VoxelConstants.blockSize, VoxelConstants.blockSize),
+        (0, VoxelConstants.blockSize, -VoxelConstants.blockSize)
+    ]
+
     func voxelBlockToData(_ block: VoxelBlock) -> VoxelBlockData {
         VoxelBlockData(
             x: block.x,
@@ -358,20 +366,13 @@ private extension TreeViewModel {
             positionToIndex[block.positionKey] = i
         }
 
-        let diagonalOffsets: [(Float, Float, Float)] = [
-            (VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
-            (-VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
-            (0, VoxelConstants.blockSize, VoxelConstants.blockSize),
-            (0, VoxelConstants.blockSize, -VoxelConstants.blockSize)
-        ]
-
         return inputBlocks.enumerated().map { i, block in
             if block.blockType == .trunk, block.y == 0 {
                 return block
             }
 
             var bestIndex: Int?
-            for offset in PositionKey.faceOffsets + diagonalOffsets {
+            for offset in Self.parentSearchOffsets {
                 let neighborKey = PositionKey(x: block.x + offset.0, y: block.y + offset.1, z: block.z + offset.2)
                 guard let neighborIndex = positionToIndex[neighborKey], neighborIndex != i else { continue }
                 let neighbor = inputBlocks[neighborIndex]

@@ -73,15 +73,20 @@ enum GrowthEngine {
         var rng = SeededRandom(seed: UInt64(tree.seed) &+ UInt64(tree.totalBlocks))
 
         // Structural tips ignore foliage children so a branch can keep growing after sprouting leaves.
-        var parentIndices = Set(allBlocks.enumerated().compactMap { index, _ in
-            hasStructuralChild(for: index, in: allBlocks) ? index : nil
-        })
+        // Reverse-index: one pass over allBlocks to collect structural parents (O(n) vs O(n²)).
+        var parentIndices: Set<Int> = []
+        for block in allBlocks where isStructuralBlock(block.blockType) {
+            if let pi = block.parentIndex { parentIndices.insert(pi) }
+        }
         var tipIndices = Set(allBlocks.indices.filter {
             !parentIndices.contains($0) && isGrowableTip(allBlocks[$0].blockType)
         })
 
         var occupiedPositions = Set(allBlocks.map(\.positionKey))
         var currentMaxY = allBlocks.map(\.y).max() ?? 0
+        // trunkTopY is constant during the loop: growBlock only adds branches/leaves,
+        // and thickenTrunk adds trunk blocks laterally (same Y level).
+        let trunkTopY = allBlocks.filter { $0.blockType == .trunk }.map(\.y).max() ?? currentMaxY
 
         for tick in 0 ..< elapsedHours {
             let tickDate = lastEval.addingTimeInterval(Double(tick) * 3600)
@@ -98,7 +103,7 @@ enum GrowthEngine {
                         allBlocks: allBlocks,
                         tipIndices: tipIndices,
                         occupiedPositions: &occupiedPositions,
-                        maxY: currentMaxY,
+                        trunkTopY: trunkTopY,
                         season: season,
                         rng: &rng,
                         pendingInteractions: pendingInteractions
@@ -141,17 +146,11 @@ enum GrowthEngine {
     }
 
     private static func isGrowableTip(_ blockType: BlockType) -> Bool {
-        blockType == .branch || blockType == .trunk
+        isStructuralBlock(blockType)
     }
 
     private static func isStructuralBlock(_ blockType: BlockType) -> Bool {
         blockType == .branch || blockType == .trunk
-    }
-
-    private static func hasStructuralChild(for index: Int, in blocks: [VoxelBlockData]) -> Bool {
-        blocks.contains { block in
-            block.parentIndex == index && isStructuralBlock(block.blockType)
-        }
     }
 
     // MARK: - Growth Rate
@@ -178,7 +177,7 @@ enum GrowthEngine {
         allBlocks: [VoxelBlockData],
         tipIndices: Set<Int>,
         occupiedPositions: inout Set<PositionKey>,
-        maxY: Float,
+        trunkTopY: Float,
         season: Season,
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
@@ -207,10 +206,6 @@ enum GrowthEngine {
         }
 
         let tip = allBlocks[selectedTipIndex]
-        let trunkTopY = allBlocks
-            .filter { $0.blockType == .trunk }
-            .map(\.y)
-            .max() ?? maxY
         let trunkHeight = max(trunkTopY + VoxelConstants.blockSize, VoxelConstants.blockSize)
         let canopyLimitY = trunkTopY + trunkHeight * 0.8
         let isHighUp = tip.y >= canopyLimitY
@@ -374,7 +369,7 @@ enum GrowthEngine {
         return Array(trunkTips)
     }
 
-    private static func branchDistanceFromTrunk(startingAt index: Int, allBlocks: [VoxelBlockData]) -> Int {
+    static func branchDistanceFromTrunk(startingAt index: Int, allBlocks: [VoxelBlockData]) -> Int {
         var distance = 0
         var currentIndex: Int? = index
 
