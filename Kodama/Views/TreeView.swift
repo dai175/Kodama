@@ -51,7 +51,7 @@ struct TreeView: View {
         .sheet(isPresented: $showSettings) {
             #if DEBUG
                 SettingsView(
-                    onTreeReset: { handleTreeReset() },
+                    onTreeReset: handleTreeReset,
                     onTimeTravel: { days in
                         guard let bonsaiRenderer = renderer else { return }
                         viewModel.timeTravel(days: days, context: modelContext, renderer: bonsaiRenderer)
