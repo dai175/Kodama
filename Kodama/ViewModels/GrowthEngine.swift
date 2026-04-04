@@ -14,6 +14,7 @@ struct GrowthResult {
 
 // MARK: - GrowthEngine
 
+// swiftlint:disable type_body_length
 enum GrowthEngine {
     private static let growthAttemptsPerBlock = 8
 
@@ -91,6 +92,7 @@ enum GrowthEngine {
         for tick in 0 ..< elapsedHours {
             let tickDate = lastEval.addingTimeInterval(Double(tick) * 3600)
             let season = Season.current(from: tickDate)
+            let growthStage = TreeBuilder.growthStage(for: allBlocks)
 
             let growthCount = blocksPerTick(season: season, rng: &rng)
             let prevCount = allBlocks.count
@@ -104,6 +106,7 @@ enum GrowthEngine {
                         tipIndices: tipIndices,
                         occupiedPositions: &occupiedPositions,
                         trunkTopY: trunkTopY,
+                        growthStage: growthStage,
                         season: season,
                         rng: &rng,
                         pendingInteractions: pendingInteractions
@@ -178,6 +181,7 @@ enum GrowthEngine {
         tipIndices: Set<Int>,
         occupiedPositions: inout Set<PositionKey>,
         trunkTopY: Float,
+        growthStage: TreeBuilder.GrowthStage,
         season: Season,
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
@@ -217,6 +221,7 @@ enum GrowthEngine {
             tip: tip,
             canGrowFoliage: canGrowFoliage,
             isHighUp: isHighUp,
+            growthStage: growthStage,
             season: season,
             rng: &rng
         )
@@ -225,6 +230,7 @@ enum GrowthEngine {
             from: tip,
             blockType: blockType,
             isHighUp: isHighUp,
+            growthStage: growthStage,
             rng: &rng,
             pendingInteractions: pendingInteractions
         )
@@ -258,6 +264,7 @@ enum GrowthEngine {
         tip: VoxelBlockData,
         canGrowFoliage: Bool,
         isHighUp: Bool,
+        growthStage: TreeBuilder.GrowthStage,
         season: Season,
         rng: inout SeededRandom
     ) -> BlockType {
@@ -271,21 +278,35 @@ enum GrowthEngine {
             return .branch
         }
 
+        let leafThreshold: Int
+        let flowerThreshold: Int
+        switch growthStage {
+        case .sapling:
+            leafThreshold = isHighUp ? 42 : 22
+            flowerThreshold = 2
+        case .young:
+            leafThreshold = isHighUp ? 66 : 42
+            flowerThreshold = 4
+        case .mature:
+            leafThreshold = isHighUp ? 82 : 62
+            flowerThreshold = 5
+        }
+
         if isHighUp {
-            if season == .spring, roll < 10 {
+            if season == .spring, roll < flowerThreshold {
                 return .flower
-            } else if roll < 75 {
+            } else if roll < leafThreshold {
                 return .leaf
             } else {
                 return .branch
             }
         }
 
-        if season == .spring, roll < 10 {
+        if season == .spring, roll < flowerThreshold {
             return .flower
         }
 
-        if roll < 55 {
+        if roll < leafThreshold {
             return .leaf
         }
 
@@ -298,6 +319,7 @@ enum GrowthEngine {
         from tip: VoxelBlockData,
         blockType: BlockType,
         isHighUp: Bool,
+        growthStage: TreeBuilder.GrowthStage,
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
     ) -> (Float, Float, Float) {
@@ -311,11 +333,7 @@ enum GrowthEngine {
                 (bs, 0, 0), (-bs, 0, 0),
                 (0, 0, bs), (0, 0, -bs)
             ]
-            weights = [
-                20.0,
-                17.5, 17.5,
-                17.5, 17.5
-            ]
+            weights = foliageDirectionWeights(for: growthStage)
         } else {
             directions = [
                 (bs, 0, 0), (-bs, 0, 0),
@@ -324,13 +342,7 @@ enum GrowthEngine {
                 (bs, -bs, 0), (-bs, -bs, 0),
                 (0, -bs, bs), (0, -bs, -bs)
             ]
-            weights = [
-                17.5, 17.5,
-                17.5, 17.5,
-                isHighUp || tip.blockType == .trunk ? 8.0 : 20.0,
-                2.5, 2.5,
-                2.5, 2.5
-            ]
+            weights = structuralDirectionWeights(for: growthStage, isHighUp: isHighUp, tip: tip)
         }
 
         var adjustedWeights = weights
@@ -357,6 +369,50 @@ enum GrowthEngine {
         let indices = Array(directions.indices)
         let selectedIndex = weightedSelect(indices: indices, weights: adjustedWeights, rng: &rng)
         return directions[selectedIndex]
+    }
+
+    private static func foliageDirectionWeights(for stage: TreeBuilder.GrowthStage) -> [Double] {
+        switch stage {
+        case .sapling:
+            [26.0, 14.0, 14.0, 14.0, 14.0]
+        case .young:
+            [18.0, 18.0, 18.0, 18.0, 18.0]
+        case .mature:
+            [11.0, 20.5, 20.5, 20.5, 20.5]
+        }
+    }
+
+    private static func structuralDirectionWeights(
+        for stage: TreeBuilder.GrowthStage,
+        isHighUp: Bool,
+        tip: VoxelBlockData
+    ) -> [Double] {
+        switch stage {
+        case .sapling:
+            [
+                15.0, 15.0,
+                15.0, 15.0,
+                isHighUp || tip.blockType == .trunk ? 18.0 : 28.0,
+                2.0, 2.0,
+                3.0, 3.0
+            ]
+        case .young:
+            [
+                17.0, 17.0,
+                17.0, 17.0,
+                isHighUp || tip.blockType == .trunk ? 10.0 : 22.0,
+                2.0, 2.0,
+                3.0, 3.0
+            ]
+        case .mature:
+            [
+                20.0, 20.0,
+                20.0, 20.0,
+                isHighUp || tip.blockType == .trunk ? 5.0 : 12.0,
+                1.5, 1.5,
+                0.0, 0.0
+            ]
+        }
     }
 
     private static func prioritizedTipIndices(from allBlocks: [VoxelBlockData], tipIndices: Set<Int>) -> [Int] {
@@ -477,3 +533,5 @@ enum GrowthEngine {
         return indices[indices.count - 1]
     }
 }
+
+// swiftlint:enable type_body_length

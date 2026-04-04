@@ -70,6 +70,54 @@ struct KodamaTests {
         #expect(newBlocks.count <= 8)
     }
 
+    @Test func growthStageClassifiesSaplingYoungAndMatureStructures() {
+        let saplingBlocks = TreeBuilder.buildSapling(seed: 11)
+        let youngBlocks = makeYoungTree()
+        let matureBlocks = makeMatureTree()
+
+        #expect(TreeBuilder.growthStage(for: saplingBlocks) == .sapling)
+        #expect(TreeBuilder.growthStage(for: youngBlocks) == .young)
+        #expect(TreeBuilder.growthStage(for: matureBlocks) == .mature)
+    }
+
+    @Test func springGrowthAddsDenserFoliageOnMatureTreesThanSaplings() {
+        let start = makeDate(year: 2026, month: 4, day: 1)
+        let end = makeDate(year: 2026, month: 4, day: 21)
+
+        let sapling = TreeBuilder.buildSapling(seed: 21)
+        let mature = makeMatureTree()
+
+        let saplingTree = BonsaiTree(seed: 21)
+        saplingTree.totalBlocks = sapling.count
+        let matureTree = BonsaiTree(seed: 21)
+        matureTree.totalBlocks = mature.count
+
+        let saplingGrowth = GrowthEngine.calculateGrowth(
+            tree: saplingTree,
+            existingBlocks: sapling,
+            since: start,
+            currentDate: end,
+            maxElapsedHours: 24 * 21
+        )
+        let matureGrowth = GrowthEngine.calculateGrowth(
+            tree: matureTree,
+            existingBlocks: mature,
+            since: start,
+            currentDate: end,
+            maxElapsedHours: 24 * 21
+        )
+
+        let saplingFoliage = saplingGrowth.filter { $0.blockType == .leaf || $0.blockType == .flower }.count
+        let matureFoliage = matureGrowth.filter { $0.blockType == .leaf || $0.blockType == .flower }.count
+        let saplingOuterSpread = averageRadialSpread(of: saplingGrowth)
+        let matureOuterSpread = averageRadialSpread(of: matureGrowth)
+
+        #expect(!saplingGrowth.isEmpty)
+        #expect(!matureGrowth.isEmpty)
+        #expect(matureFoliage > saplingFoliage)
+        #expect(matureOuterSpread > saplingOuterSpread)
+    }
+
     @Test func growthStartsFromBranchTipsWhenBranchesExist() {
         let start = makeDate(year: 2026, month: 4, day: 1)
         let end = makeDate(year: 2026, month: 4, day: 4)
@@ -149,10 +197,95 @@ private func makeBranchingTree() -> [VoxelBlockData] {
     ]
 }
 
+private func makeYoungTree() -> [VoxelBlockData] {
+    var blocks: [VoxelBlockData] = []
+    let bs = VoxelConstants.blockSize
+
+    blocks.append(VoxelBlockData(x: 0, y: 0, z: 0, blockType: .trunk, colorHex: "#4A3520", parentIndex: nil))
+    for level in 1 ... 5 {
+        blocks.append(
+            VoxelBlockData(
+                x: level >= 3 ? bs : 0,
+                y: Float(level) * bs,
+                z: 0,
+                blockType: .trunk,
+                colorHex: "#4A3520",
+                parentIndex: blocks.count - 1
+            )
+        )
+    }
+
+    let firstBranchOrigin = 3
+    blocks.append(VoxelBlockData(x: bs * 2, y: bs * 3, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: firstBranchOrigin))
+    blocks.append(VoxelBlockData(x: bs * 3, y: bs * 3, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: blocks.count - 1))
+    blocks.append(VoxelBlockData(x: bs * 3, y: bs * 4, z: 0, blockType: .branch, colorHex: "#5A4530", parentIndex: blocks.count - 1))
+    blocks.append(VoxelBlockData(x: bs * 3, y: bs * 5, z: 0, blockType: .leaf, colorHex: "#7AB648", parentIndex: blocks.count - 1))
+    blocks.append(VoxelBlockData(x: bs * 4, y: bs * 4, z: 0, blockType: .leaf, colorHex: "#7AB648", parentIndex: blocks.count - 2))
+
+    let secondBranchOrigin = 4
+    blocks.append(VoxelBlockData(x: 0, y: bs * 4, z: bs, blockType: .branch, colorHex: "#5A4530", parentIndex: secondBranchOrigin))
+    blocks.append(VoxelBlockData(x: 0, y: bs * 5, z: bs, blockType: .branch, colorHex: "#5A4530", parentIndex: blocks.count - 1))
+    blocks.append(VoxelBlockData(x: 0, y: bs * 6, z: bs, blockType: .leaf, colorHex: "#7AB648", parentIndex: blocks.count - 1))
+
+    return blocks
+}
+
+private func makeMatureTree() -> [VoxelBlockData] {
+    var blocks = makeYoungTree()
+    let bs = VoxelConstants.blockSize
+
+    let trunkTopIndex = blocks.firstIndex { $0.blockType == .trunk && $0.y == bs * 5 } ?? 5
+    blocks.append(VoxelBlockData(x: bs, y: bs * 6, z: 0, blockType: .trunk, colorHex: "#4A3520", parentIndex: trunkTopIndex))
+    blocks.append(VoxelBlockData(x: bs, y: bs * 7, z: 0, blockType: .trunk, colorHex: "#4A3520", parentIndex: blocks.count - 1))
+
+    let crownOrigin = blocks.count - 1
+    let matureExtensions: [(Float, Float, Float, BlockType, Int)] = [
+        (bs * 2, bs * 7, 0, .branch, crownOrigin),
+        (bs * 3, bs * 7, 0, .branch, blocks.count),
+        (bs * 3, bs * 8, 0, .leaf, blocks.count + 1),
+        (bs * 3, bs * 7, bs, .leaf, blocks.count + 1),
+        (bs * 2, bs * 7, bs, .leaf, blocks.count),
+        (-bs, bs * 6, bs, .branch, crownOrigin),
+        (-bs * 2, bs * 6, bs, .branch, blocks.count + 4),
+        (-bs * 2, bs * 7, bs, .leaf, blocks.count + 5),
+        (-bs * 2, bs * 6, bs * 2, .leaf, blocks.count + 5),
+        (bs, bs * 6, -bs, .branch, crownOrigin),
+        (bs * 2, bs * 6, -bs, .branch, blocks.count + 8),
+        (bs * 2, bs * 7, -bs, .leaf, blocks.count + 9),
+        (bs * 2, bs * 6, -bs * 2, .leaf, blocks.count + 9),
+        (0, bs * 7, 0, .leaf, crownOrigin)
+    ]
+
+    for extensionBlock in matureExtensions {
+        blocks.append(
+            VoxelBlockData(
+                x: extensionBlock.0,
+                y: extensionBlock.1,
+                z: extensionBlock.2,
+                blockType: extensionBlock.3,
+                colorHex: extensionBlock.3 == .branch || extensionBlock.3 == .trunk ? "#5A4530" : "#7AB648",
+                parentIndex: extensionBlock.4
+            )
+        )
+    }
+
+    return blocks
+}
+
 private func isFaceAdjacent(_ vector: (Float, Float, Float)) -> Bool {
     let unit = VoxelConstants.blockSize
     let components = [abs(vector.0), abs(vector.1), abs(vector.2)]
     let movedComponents = components.filter { abs($0 - unit) < 0.0001 }
     let zeroComponents = components.filter { $0 < 0.0001 }
     return movedComponents.count == 1 && zeroComponents.count == 2
+}
+
+private func averageRadialSpread(of blocks: [VoxelBlockData]) -> Float {
+    let foliage = blocks.filter { $0.blockType == .leaf || $0.blockType == .flower }
+    guard !foliage.isEmpty else { return 0 }
+
+    let total = foliage.reduce(Float.zero) { partialResult, block in
+        partialResult + abs(block.x) + abs(block.z)
+    }
+    return total / Float(foliage.count)
 }
