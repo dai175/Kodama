@@ -226,22 +226,26 @@ import SwiftData
         treeBlocksByID: [UUID: VoxelBlock],
         context: ModelContext
     ) -> Set<Int> {
+        var deletedIndices = Set<Int>()
+
         let fallenIndices = seasonal.fallenLeaves
         for index in fallenIndices {
             if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
                 context.delete(treeBlock)
+                deletedIndices.insert(index)
             }
         }
 
         let expiredFlowerIndices = seasonal.expiredFlowers
-        for index in expiredFlowerIndices where !fallenIndices.contains(index) {
+        for index in expiredFlowerIndices where !deletedIndices.contains(index) {
             if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
                 context.delete(treeBlock)
+                deletedIndices.insert(index)
             }
         }
 
         let removedSnowIndices = seasonal.removedSnow
-        for index in removedSnowIndices {
+        for index in removedSnowIndices where !deletedIndices.contains(index) {
             if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
                 context.delete(treeBlock)
             }
