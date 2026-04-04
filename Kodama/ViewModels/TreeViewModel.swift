@@ -351,11 +351,19 @@ private extension TreeViewModel {
 
     /// Reconstructs parentIndex relationships from spatial adjacency after DB load.
     /// Down direction is searched first; trunk/branch neighbors are preferred as parents.
+    /// Includes diagonal-up neighbors so downward-sloping branches keep their parent link.
     func reconstructParentIndices(_ inputBlocks: [VoxelBlockData]) -> [VoxelBlockData] {
         var positionToIndex = [PositionKey: Int](minimumCapacity: inputBlocks.count)
         for (i, block) in inputBlocks.enumerated() {
             positionToIndex[block.positionKey] = i
         }
+
+        let diagonalOffsets: [(Float, Float, Float)] = [
+            (VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
+            (-VoxelConstants.blockSize, VoxelConstants.blockSize, 0),
+            (0, VoxelConstants.blockSize, VoxelConstants.blockSize),
+            (0, VoxelConstants.blockSize, -VoxelConstants.blockSize)
+        ]
 
         return inputBlocks.enumerated().map { i, block in
             if block.blockType == .trunk, block.y == 0 {
@@ -363,7 +371,7 @@ private extension TreeViewModel {
             }
 
             var bestIndex: Int?
-            for offset in PositionKey.faceOffsets {
+            for offset in PositionKey.faceOffsets + diagonalOffsets {
                 let neighborKey = PositionKey(x: block.x + offset.0, y: block.y + offset.1, z: block.z + offset.2)
                 guard let neighborIndex = positionToIndex[neighborKey], neighborIndex != i else { continue }
                 let neighbor = inputBlocks[neighborIndex]
