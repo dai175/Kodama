@@ -125,7 +125,6 @@ final class TreeViewModel {
         guard let tree = currentTree else { return }
         guard force || currentDate.timeIntervalSince(tree.lastGrowthEval) >= 60 else { return }
 
-        // Log an open interaction
         let openInteraction = Interaction(type: .open)
         openInteraction.timestamp = currentDate
         openInteraction.tree = tree
@@ -325,8 +324,12 @@ final class TreeViewModel {
         let newNodes = Array(allChildren.suffix(count))
         GrowthAnimator.animateNewBlocks(nodes: newNodes)
     }
+}
 
-    private func voxelBlockToData(_ block: VoxelBlock) -> VoxelBlockData {
+// MARK: - Block Data Helpers
+
+private extension TreeViewModel {
+    func voxelBlockToData(_ block: VoxelBlock) -> VoxelBlockData {
         VoxelBlockData(
             x: block.x,
             y: block.y,
@@ -339,7 +342,7 @@ final class TreeViewModel {
 
     /// Reconstructs parentIndex relationships from spatial adjacency after DB load.
     /// Down direction is searched first; trunk/branch neighbors are preferred as parents.
-    private func reconstructParentIndices(_ inputBlocks: [VoxelBlockData]) -> [VoxelBlockData] {
+    func reconstructParentIndices(_ inputBlocks: [VoxelBlockData]) -> [VoxelBlockData] {
         var positionToIndex = [PositionKey: Int](minimumCapacity: inputBlocks.count)
         for (i, block) in inputBlocks.enumerated() {
             positionToIndex[block.positionKey] = i

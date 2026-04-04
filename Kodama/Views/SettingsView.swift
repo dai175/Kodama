@@ -116,6 +116,8 @@ struct SettingsView: View {
         private var debugSection: some View {
             Section {
                 if let info = debugTreeInfo {
+                    let daysSincePlanted = Calendar.current.dateComponents([.day], from: info.createdAt, to: Date())
+                        .day ?? 0
                     HStack {
                         Text("Total Blocks")
                             .foregroundStyle(Color.softWhite.opacity(0.8))
@@ -129,10 +131,8 @@ struct SettingsView: View {
                         Text("Days Since Planted")
                             .foregroundStyle(Color.softWhite.opacity(0.8))
                         Spacer()
-                        Text(
-                            "\(Calendar.current.dateComponents([.day], from: info.createdAt, to: Date()).day ?? 0) days"
-                        )
-                        .foregroundStyle(Color.softWhite.opacity(0.5))
+                        Text("\(daysSincePlanted) days")
+                            .foregroundStyle(Color.softWhite.opacity(0.5))
                     }
                     .listRowBackground(Color.white.opacity(0.05))
                 }
