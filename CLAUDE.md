@@ -38,7 +38,7 @@ swiftformat .
 ## Key Specs
 
 - Full spec: `docs/kodama-mvp-spec.md`, concept: `docs/kodama-concept.md`
-- Performance: 60fps on iPhone 12+, up to 2000 voxel blocks, render <300ms
+- Performance: 60fps on iPhone 12+, up to 5000 voxel blocks, render <300ms
 - Growth engine runs on app open only (no background processing)
 - Seasons from real-world date affect growth rate and leaf colors
 - No sound, no haptics, no network — purely local, quiet experience

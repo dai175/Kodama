@@ -316,7 +316,7 @@ When the app opens and new blocks are calculated:
 ### Targets
 
 - 60fps on iPhone 12 and later
-- Support up to 2000 voxel blocks per tree
+- Support up to 5000 voxel blocks per tree
 - Scene render within 300ms on app open
 - Growth calculation within 100ms (even for 7 days elapsed)
 

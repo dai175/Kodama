@@ -201,6 +201,16 @@ enum TreeBuilder {
                     curY += blockSize
                 }
 
+                // Reuse existing trunk block at this position to avoid z-fighting
+                if let existingIdx = blocks.indices.first(where: {
+                    abs(blocks[$0].x - curX) < 0.001 &&
+                        abs(blocks[$0].y - curY) < 0.001 &&
+                        abs(blocks[$0].z - curZ) < 0.001
+                }) {
+                    prevIdx = existingIdx
+                    continue
+                }
+
                 let stepIdx = blocks.count
                 blocks.append(VoxelBlockData(
                     x: curX,

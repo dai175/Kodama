@@ -81,6 +81,7 @@ enum GrowthEngine {
             let season = Season.current(from: tickDate)
 
             let growthCount = blocksPerTick(season: season, rng: &rng)
+            let prevCount = allBlocks.count
 
             for _ in 0 ..< growthCount {
                 guard allBlocks.count < VoxelConstants.maxBlocks else { return newBlocks }
@@ -105,8 +106,8 @@ enum GrowthEngine {
                 }
             }
 
-            // Trigger thickening near every 30-block milestone; window accounts for multi-block ticks
-            if allBlocks.count >= 30, allBlocks.count % 30 < growthCount + 1 {
+            // Trigger thickening only when the 30-block milestone was actually crossed this tick
+            if allBlocks.count / 30 > prevCount / 30 {
                 let thickenBlocks = thickenTrunk(allBlocks: allBlocks, occupiedPositions: &occupiedPositions, rng: &rng)
                 for block in thickenBlocks {
                     guard allBlocks.count < VoxelConstants.maxBlocks else { break }
