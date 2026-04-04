@@ -24,14 +24,16 @@ enum GrowthEngine {
         since lastEval: Date,
         currentDate: Date = Date(),
         pendingInteractions: [Interaction] = [],
-        blockDates: [Date?] = []
+        blockDates: [Date?] = [],
+        maxElapsedHours: Int = 168
     ) -> GrowthResult {
         let newBlocks = calculateGrowth(
             tree: tree,
             existingBlocks: existingBlocks,
             since: lastEval,
             currentDate: currentDate,
-            pendingInteractions: pendingInteractions
+            pendingInteractions: pendingInteractions,
+            maxElapsedHours: maxElapsedHours
         )
 
         let allBlocks = existingBlocks + newBlocks
@@ -56,10 +58,11 @@ enum GrowthEngine {
         existingBlocks: [VoxelBlockData],
         since lastEval: Date,
         currentDate: Date = Date(),
-        pendingInteractions: [Interaction] = []
+        pendingInteractions: [Interaction] = [],
+        maxElapsedHours: Int = 168
     ) -> [VoxelBlockData] {
         let elapsed = currentDate.timeIntervalSince(lastEval)
-        let elapsedHours = min(Int(elapsed / 3600), 8760)
+        let elapsedHours = min(Int(elapsed / 3600), maxElapsedHours)
 
         guard elapsedHours > 0 else { return [] }
 

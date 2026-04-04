@@ -115,16 +115,25 @@ final class TreeViewModel {
         }
     }
 
-    func evaluateGrowth(context: ModelContext, renderer: BonsaiRenderer, force: Bool = false) {
+    func evaluateGrowth(
+        context: ModelContext,
+        renderer: BonsaiRenderer,
+        force: Bool = false,
+        currentDate: Date = Date(),
+        maxElapsedHours: Int = 168
+    ) {
         guard let tree = currentTree else { return }
-        guard force || Date().timeIntervalSince(tree.lastGrowthEval) >= 60 else { return }
+        guard force || currentDate.timeIntervalSince(tree.lastGrowthEval) >= 60 else { return }
 
         // Log an open interaction
         let openInteraction = Interaction(type: .open)
+        openInteraction.timestamp = currentDate
         openInteraction.tree = tree
         context.insert(openInteraction)
 
-        let pendingInteractions = tree.interactions.filter { $0.timestamp > tree.lastGrowthEval }
+        let pendingInteractions = tree.interactions.filter {
+            $0.timestamp > tree.lastGrowthEval && $0.timestamp <= currentDate
+        }
         let treeBlocks = tree.blocks
         let treeBlockLookup: [PositionKey: VoxelBlock] = Dictionary(
             treeBlocks.map { ($0.positionKey, $0) },
@@ -136,13 +145,15 @@ final class TreeViewModel {
             tree: tree,
             existingBlocks: blocks,
             since: tree.lastGrowthEval,
+            currentDate: currentDate,
             pendingInteractions: pendingInteractions,
-            blockDates: blockDates
+            blockDates: blockDates,
+            maxElapsedHours: maxElapsedHours
         )
 
         let seasonal = growthResult.seasonalEffects
         guard hasSeasonalChanges(newBlocks: growthResult.newBlocks, seasonal: seasonal) else {
-            tree.lastGrowthEval = Date()
+            tree.lastGrowthEval = currentDate
             try? context.save()
             return
         }
@@ -156,7 +167,8 @@ final class TreeViewModel {
             tree: tree,
             added: growthResult.newBlocks,
             seasonal: seasonal,
-            removedCount: removedIndices.count
+            removedCount: removedIndices.count,
+            currentDate: currentDate
         )
         do {
             try context.save()
@@ -246,11 +258,12 @@ final class TreeViewModel {
         tree: BonsaiTree,
         added: [VoxelBlockData],
         seasonal: SeasonalResult,
-        removedCount: Int
+        removedCount: Int,
+        currentDate: Date
     ) {
         let addedCount = added.count + seasonal.newSnowBlocks.count + seasonal.newMossBlocks.count
         tree.totalBlocks += addedCount - removedCount
-        tree.lastGrowthEval = Date()
+        tree.lastGrowthEval = currentDate
     }
 
     private func updateInMemoryBlocks(
@@ -280,12 +293,24 @@ final class TreeViewModel {
 
     #if DEBUG
         func timeTravel(days: Int, context: ModelContext, renderer: BonsaiRenderer) {
-            guard let tree = currentTree else { return }
+            guard let tree = currentTree else {
+                print("[TimeTravel] ABORT: currentTree is nil")
+                return
+            }
+            let blocksBefore = blocks.count
             let savedOverride = Season.debugOverride
             defer { Season.debugOverride = savedOverride }
             Season.debugOverride = nil
-            tree.lastGrowthEval = tree.lastGrowthEval.addingTimeInterval(-Double(days) * 86400)
-            evaluateGrowth(context: context, renderer: renderer, force: true)
+            let targetDate = tree.lastGrowthEval.addingTimeInterval(Double(days) * 86400)
+            print("[TimeTravel] Advancing growth evaluation by \(days) days to \(targetDate)")
+            evaluateGrowth(
+                context: context,
+                renderer: renderer,
+                force: true,
+                currentDate: targetDate,
+                maxElapsedHours: 8760
+            )
+            print("[TimeTravel] Blocks: \(blocksBefore) → \(blocks.count)")
         }
     #endif
 
