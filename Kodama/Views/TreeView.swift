@@ -116,7 +116,7 @@ struct TreeView: View {
             at: point, in: scnView, scene: bonsaiScene
         ) else { return }
 
-        viewModel.handleTouch(position: hitPosition, context: modelContext)
+        viewModel.handleTouch(position: hitPosition, scene: bonsaiScene, context: modelContext)
         overlay.showPalette(touchPosition: hitPosition, screenPoint: point)
     }
 }
