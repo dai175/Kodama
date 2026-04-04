@@ -198,6 +198,15 @@ enum GrowthEngine {
         let newY = tip.y + direction.1
         let newZ = tip.z + direction.2
 
+        // Ensure new block is face-adjacent to at least one existing block
+        let faceOffsets: [(Float, Float, Float)] = [
+            (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)
+        ]
+        let hasNeighbor = faceOffsets.contains { offset in
+            occupiedPositions.contains(PositionKey(x: newX + offset.0, y: newY + offset.1, z: newZ + offset.2))
+        }
+        guard hasNeighbor else { return nil }
+
         // Avoid overlapping existing blocks
         guard !occupiedPositions.contains(PositionKey(x: newX, y: newY, z: newZ)) else { return nil }
 
@@ -253,22 +262,17 @@ enum GrowthEngine {
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
     ) -> (Float, Float, Float) {
-        // Upward bias + random lateral
+        // Face-adjacent directions only (no diagonals) with upward bias
         let directions: [(Float, Float, Float)] = [
             (0, 1, 0), // up
-            (1, 1, 0), (-1, 1, 0), // up-lateral X
-            (0, 1, 1), (0, 1, -1), // up-lateral Z
             (1, 0, 0), (-1, 0, 0), // lateral X
             (0, 0, 1), (0, 0, -1) // lateral Z
         ]
 
-        // Weight upward directions more heavily
         let weights: [Double] = [
             3.0, // up
-            2.0, 2.0, // up-lateral
-            2.0, 2.0, // up-lateral
-            1.0, 1.0, // lateral
-            1.0, 1.0 // lateral
+            1.0, 1.0, // lateral X
+            1.0, 1.0 // lateral Z
         ]
 
         var adjustedWeights = weights
@@ -279,10 +283,10 @@ enum GrowthEngine {
             let wordLength = word.count
             if wordLength > 5 {
                 // Longer words = more horizontal
-                adjustedWeights[5] += Double(wordLength) * 0.3
-                adjustedWeights[6] += Double(wordLength) * 0.3
-                adjustedWeights[7] += Double(wordLength) * 0.3
-                adjustedWeights[8] += Double(wordLength) * 0.3
+                adjustedWeights[1] += Double(wordLength) * 0.3
+                adjustedWeights[2] += Double(wordLength) * 0.3
+                adjustedWeights[3] += Double(wordLength) * 0.3
+                adjustedWeights[4] += Double(wordLength) * 0.3
             }
 
             // First letter ASCII influences direction
