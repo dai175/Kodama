@@ -115,9 +115,9 @@ final class TreeViewModel {
         }
     }
 
-    func evaluateGrowth(context: ModelContext, renderer: BonsaiRenderer) {
+    func evaluateGrowth(context: ModelContext, renderer: BonsaiRenderer, force: Bool = false) {
         guard let tree = currentTree else { return }
-        guard Date().timeIntervalSince(tree.lastGrowthEval) >= 60 else { return }
+        guard force || Date().timeIntervalSince(tree.lastGrowthEval) >= 60 else { return }
 
         // Log an open interaction
         let openInteraction = Interaction(type: .open)
@@ -277,6 +277,17 @@ final class TreeViewModel {
             blocks = reconstructParentIndices(blocks)
         }
     }
+
+    #if DEBUG
+        func timeTravel(days: Int, context: ModelContext, renderer: BonsaiRenderer) {
+            guard let tree = currentTree else { return }
+            let savedOverride = Season.debugOverride
+            defer { Season.debugOverride = savedOverride }
+            Season.debugOverride = nil
+            tree.lastGrowthEval = tree.lastGrowthEval.addingTimeInterval(-Double(days) * 86400)
+            evaluateGrowth(context: context, renderer: renderer, force: true)
+        }
+    #endif
 
     private func animateNewNodes(renderer: BonsaiRenderer, count: Int) {
         guard count > 0 else { return }
