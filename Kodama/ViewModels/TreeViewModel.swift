@@ -234,6 +234,7 @@ final class TreeViewModel {
         for blockData in blocks {
             let key = StorageKey(position: blockData.pos, layer: GridMapper.layer(for: blockData.blockType))
             if let existingBlock = existingByLayer[key] {
+                existingBlock.id = blockData.id
                 existingBlock.blockType = blockData.blockType
                 existingBlock.colorHex = blockData.colorHex
                 existingBlock.parentBlockID = blockData.parentID

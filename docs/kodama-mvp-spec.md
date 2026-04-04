@@ -71,9 +71,9 @@ For full v2+ details, see Section 14 of `kodama-concept.md`.
 |----------|------|-------------|
 | id | UUID | Primary key |
 | treeID | UUID | Foreign key to BonsaiTree |
-| x | Float | X coordinate |
-| y | Float | Y coordinate |
-| z | Float | Z coordinate |
+| x | Int | X coordinate in voxel grid |
+| y | Int | Y coordinate in voxel grid |
+| z | Int | Z coordinate in voxel grid |
 | blockType | BlockType | trunk, branch, leaf, flower, moss, snow |
 | colorHex | String | Hex color code |
 | placedAt | Date | When this block was added |

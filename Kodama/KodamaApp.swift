@@ -20,7 +20,7 @@ struct KodamaApp: App {
         ])
 
         do {
-            let appSupportURL = try persistentStoreDirectory()
+            let appSupportURL = try Self.persistentStoreDirectory()
             let storeURL = appSupportURL.appendingPathComponent("default.store")
             let modelConfiguration = ModelConfiguration(
                 "default",
