@@ -108,7 +108,6 @@ enum TreeBuilder {
                     layerPositions.append((bx, bz))
                 }
             }
-            // Sort for deterministic iteration order
             layerPositions.sort { lhs, rhs in
                 lhs.bx == rhs.bx ? lhs.bz < rhs.bz : lhs.bx < rhs.bx
             }
@@ -117,7 +116,6 @@ enum TreeBuilder {
                 let xWorld = Float(pos.bx) * blockSize
                 let zWorld = Float(pos.bz) * blockSize
 
-                // Find parent: block in the layer below with closest XZ position
                 var parentIdx: Int?
                 if yIdx > 0 {
                     var bestDist = Float.greatestFiniteMagnitude
