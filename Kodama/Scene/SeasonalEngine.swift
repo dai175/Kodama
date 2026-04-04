@@ -227,7 +227,7 @@ enum SeasonalEngine {
     ) {
         let now = Date()
         for (index, block) in blocks.enumerated()
-            where block.blockType == .leaf && abs(block.y) < VoxelConstants.halfBlock {
+            where block.blockType == .leaf && abs(block.y) < VoxelConstants.blockSize {
             guard index < blockDates.count, let placedAt = blockDates[index] else { continue }
             let daysSincePlaced = Calendar.current.dateComponents([.day], from: placedAt, to: now).day ?? 0
             guard daysSincePlaced > maxDays, !result.fallenLeaves.contains(index) else { continue }
