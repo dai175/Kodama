@@ -94,7 +94,7 @@ enum GrowthEngine {
             let season = Season.current(from: tickDate)
             let growthStage = TreeBuilder.growthStage(for: allBlocks)
 
-            let growthCount = blocksPerTick(season: season, rng: &rng)
+            let growthCount = blocksPerTick(season: season, growthStage: growthStage, rng: &rng)
             let prevCount = allBlocks.count
 
             for _ in 0 ..< growthCount {
@@ -158,14 +158,26 @@ enum GrowthEngine {
 
     // MARK: - Growth Rate
 
-    private static func blocksPerTick(season: Season, rng: inout SeededRandom) -> Int {
+    private static func blocksPerTick(
+        season: Season,
+        growthStage: TreeBuilder.GrowthStage,
+        rng: inout SeededRandom
+    ) -> Int {
         let roll = Int(rng.next() % 100)
 
         switch season {
         case .spring:
             return roll < 20 ? 1 : 0
         case .summer:
-            return roll < 12 ? 1 : 0
+            let threshold = switch growthStage {
+            case .sapling:
+                12
+            case .young:
+                14
+            case .mature:
+                17
+            }
+            return roll < threshold ? 1 : 0
         case .autumn:
             return roll < 4 ? 1 : 0
         case .winter:
@@ -215,12 +227,21 @@ enum GrowthEngine {
         let isHighUp = tip.y >= canopyLimitY
         let branchDepth = branchDistanceFromTrunk(startingAt: selectedTipIndex, allBlocks: allBlocks)
         let canGrowFoliage = tip.blockType == .branch && branchDepth >= 2
+        let crowdedNeighborCount = localCrowding(around: tip, occupiedPositions: occupiedPositions)
+        let availableStructuralOpenings = availableStructuralOpeningCount(
+            from: tip,
+            isHighUp: isHighUp,
+            growthStage: growthStage,
+            occupiedPositions: occupiedPositions
+        )
 
         // Determine block type
         let blockType = determineBlockType(
             tip: tip,
             canGrowFoliage: canGrowFoliage,
             isHighUp: isHighUp,
+            crowdedNeighborCount: crowdedNeighborCount,
+            availableStructuralOpenings: availableStructuralOpenings,
             growthStage: growthStage,
             season: season,
             rng: &rng
@@ -264,6 +285,8 @@ enum GrowthEngine {
         tip: VoxelBlockData,
         canGrowFoliage: Bool,
         isHighUp: Bool,
+        crowdedNeighborCount: Int,
+        availableStructuralOpenings: Int,
         growthStage: TreeBuilder.GrowthStage,
         season: Season,
         rng: inout SeededRandom
@@ -278,8 +301,8 @@ enum GrowthEngine {
             return .branch
         }
 
-        let leafThreshold: Int
-        let flowerThreshold: Int
+        var leafThreshold: Int
+        var flowerThreshold: Int
         switch growthStage {
         case .sapling:
             leafThreshold = isHighUp ? 42 : 22
@@ -288,25 +311,47 @@ enum GrowthEngine {
             leafThreshold = isHighUp ? 66 : 42
             flowerThreshold = 4
         case .mature:
-            leafThreshold = isHighUp ? 82 : 62
-            flowerThreshold = 5
+            leafThreshold = isHighUp ? 70 : 50
+            flowerThreshold = 3
         }
 
+        if growthStage == .mature {
+            if season == .summer {
+                leafThreshold -= isHighUp ? 16 : 10
+                flowerThreshold = 0
+            }
+            if crowdedNeighborCount >= 3 {
+                leafThreshold -= 18
+                flowerThreshold = 0
+            }
+            if availableStructuralOpenings <= 1 {
+                leafThreshold -= 20
+                flowerThreshold = 0
+            }
+        }
+
+        if availableStructuralOpenings == 0 {
+            return .branch
+        }
+
+        let adjustedLeafThreshold = max(0, leafThreshold)
+        let adjustedFlowerThreshold = max(0, flowerThreshold)
+
         if isHighUp {
-            if season == .spring, roll < flowerThreshold {
+            if season == .spring, roll < adjustedFlowerThreshold {
                 return .flower
-            } else if roll < leafThreshold {
+            } else if roll < adjustedLeafThreshold {
                 return .leaf
             } else {
                 return .branch
             }
         }
 
-        if season == .spring, roll < flowerThreshold {
+        if season == .spring, roll < adjustedFlowerThreshold {
             return .flower
         }
 
-        if roll < leafThreshold {
+        if roll < adjustedLeafThreshold {
             return .leaf
         }
 
@@ -378,7 +423,7 @@ enum GrowthEngine {
         case .young:
             [18.0, 18.0, 18.0, 18.0, 18.0]
         case .mature:
-            [11.0, 20.5, 20.5, 20.5, 20.5]
+            [9.0, 21.0, 21.0, 21.0, 21.0]
         }
     }
 
@@ -406,9 +451,9 @@ enum GrowthEngine {
             ]
         case .mature:
             [
-                20.0, 20.0,
-                20.0, 20.0,
-                isHighUp || tip.blockType == .trunk ? 5.0 : 12.0,
+                18.0, 18.0,
+                18.0, 18.0,
+                isHighUp || tip.blockType == .trunk ? 11.0 : 18.0,
                 1.5, 1.5,
                 0.0, 0.0
             ]
@@ -441,6 +486,59 @@ enum GrowthEngine {
         }
 
         return distance
+    }
+
+    private static func localCrowding(
+        around block: VoxelBlockData,
+        occupiedPositions: Set<PositionKey>
+    ) -> Int {
+        PositionKey.faceOffsets.reduce(into: 0) { count, offset in
+            let neighbor = PositionKey(
+                x: block.x + offset.0,
+                y: block.y + offset.1,
+                z: block.z + offset.2
+            )
+            if occupiedPositions.contains(neighbor) {
+                count += 1
+            }
+        }
+    }
+
+    private static func availableStructuralOpeningCount(
+        from tip: VoxelBlockData,
+        isHighUp: Bool,
+        growthStage: TreeBuilder.GrowthStage,
+        occupiedPositions: Set<PositionKey>
+    ) -> Int {
+        let bs = VoxelConstants.blockSize
+        let directions: [(Float, Float, Float)] = [
+            (bs, 0, 0), (-bs, 0, 0),
+            (0, 0, bs), (0, 0, -bs),
+            (0, bs, 0),
+            (bs, -bs, 0), (-bs, -bs, 0),
+            (0, -bs, bs), (0, -bs, -bs)
+        ]
+
+        return directions.reduce(into: 0) { count, direction in
+            let position = PositionKey(
+                x: tip.x + direction.0,
+                y: tip.y + direction.1,
+                z: tip.z + direction.2
+            )
+            guard position.y >= 0 else { return }
+            guard !occupiedPositions.contains(position) else { return }
+
+            if direction.1 > 0 {
+                count += 1
+                return
+            }
+
+            let weights = structuralDirectionWeights(for: growthStage, isHighUp: isHighUp, tip: tip)
+            let directionIndex = directions.firstIndex(where: { $0 == direction }) ?? 0
+            if weights[directionIndex] > 0 {
+                count += 1
+            }
+        }
     }
 
     // MARK: - Color
