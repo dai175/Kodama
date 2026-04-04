@@ -137,8 +137,8 @@ final class BonsaiScene {
 
     // swiftlint:disable:next function_body_length
     private func setupPot() {
-        let bs = VoxelConstants.blockSize
-        let cs = VoxelConstants.cgBlockSize
+        let bs = VoxelConstants.renderScale
+        let cs = CGFloat(VoxelConstants.renderScale)
         let potParent = SCNNode()
 
         // Materials
