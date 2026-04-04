@@ -291,7 +291,12 @@ final class TreeViewModel {
     }
 
     #if DEBUG
-        func timeTravel(days: Int, context: ModelContext, renderer: BonsaiRenderer) {
+        func timeTravel(
+            component: Calendar.Component,
+            value: Int,
+            context: ModelContext,
+            renderer: BonsaiRenderer
+        ) {
             guard let tree = currentTree else {
                 print("[TimeTravel] ABORT: currentTree is nil")
                 return
@@ -300,8 +305,12 @@ final class TreeViewModel {
             let savedOverride = Season.debugOverride
             defer { Season.debugOverride = savedOverride }
             Season.debugOverride = nil
-            let targetDate = tree.lastGrowthEval.addingTimeInterval(Double(days) * 86400)
-            print("[TimeTravel] Advancing growth evaluation by \(days) days to \(targetDate)")
+            let targetDate = Calendar.current.date(
+                byAdding: component,
+                value: value,
+                to: tree.lastGrowthEval
+            ) ?? tree.lastGrowthEval
+            print("[TimeTravel] Advancing growth evaluation by \(value) \(component) to \(targetDate)")
             evaluateGrowth(
                 context: context,
                 renderer: renderer,
