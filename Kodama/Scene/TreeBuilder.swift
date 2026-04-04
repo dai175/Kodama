@@ -62,7 +62,10 @@ nonisolated enum TreeBuilder {
         let pathIndices: [Int]
 
         var topIndex: Int {
-            pathIndices[pathIndices.count - 1]
+            guard let last = pathIndices.last else {
+                preconditionFailure("TrunkLayout must have at least one path index")
+            }
+            return last
         }
     }
 
