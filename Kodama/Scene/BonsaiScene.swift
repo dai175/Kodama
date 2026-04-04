@@ -95,13 +95,13 @@ final class BonsaiScene {
         camera.zFar = 100
 
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 5, 12)
+        cameraNode.position = SCNVector3(0, 3, 7)
 
         let lookAtConstraint = SCNLookAtConstraint(target: nil)
         lookAtConstraint.isGimbalLockEnabled = true
 
         let targetNode = SCNNode()
-        targetNode.position = SCNVector3(0, 3, 0)
+        targetNode.position = SCNVector3(0, 2, 0)
         scene.rootNode.addChildNode(targetNode)
 
         lookAtConstraint.target = targetNode
@@ -120,7 +120,7 @@ final class BonsaiScene {
 
         let directionalNode = SCNNode()
         directionalNode.light = directionalLight
-        directionalNode.position = SCNVector3(-5, 10, 5)
+        directionalNode.position = SCNVector3(-3, 6, 3)
         directionalNode.look(at: SCNVector3(0, 0, 0))
         scene.rootNode.addChildNode(directionalNode)
 
@@ -134,52 +134,64 @@ final class BonsaiScene {
         scene.rootNode.addChildNode(ambientNode)
     }
 
+    // swiftlint:disable:next function_body_length
     private func setupPot() {
+        let bs = VoxelConstants.blockSize
+        let cs = VoxelConstants.cgBlockSize
         let potParent = SCNNode()
-        let voxelSize: CGFloat = 1.0
 
-        let potColor = UIColor(red: 74 / 255, green: 55 / 255, blue: 40 / 255, alpha: 1)
-        let potDarkColor = UIColor(red: 60 / 255, green: 44 / 255, blue: 32 / 255, alpha: 1)
-        let potLightColor = UIColor(red: 88 / 255, green: 66 / 255, blue: 48 / 255, alpha: 1)
-
-        let baseMaterial = SCNMaterial()
-        baseMaterial.diffuse.contents = potColor
-        baseMaterial.roughness.contents = 0.8
-
+        // Materials
         let darkMaterial = SCNMaterial()
-        darkMaterial.diffuse.contents = potDarkColor
+        darkMaterial.diffuse.contents = UIColor(red: 60 / 255, green: 44 / 255, blue: 32 / 255, alpha: 1)
         darkMaterial.roughness.contents = 0.8
 
-        let lightMaterial = SCNMaterial()
-        lightMaterial.diffuse.contents = potLightColor
-        lightMaterial.roughness.contents = 0.8
+        let baseMaterial = SCNMaterial()
+        baseMaterial.diffuse.contents = UIColor(red: 74 / 255, green: 55 / 255, blue: 40 / 255, alpha: 1)
+        baseMaterial.roughness.contents = 0.8
 
-        let baseGeometry = SCNBox(width: voxelSize, height: voxelSize, length: voxelSize, chamferRadius: 0)
-        baseGeometry.materials = [baseMaterial]
+        let rimMaterial = SCNMaterial()
+        rimMaterial.diffuse.contents = UIColor(red: 88 / 255, green: 66 / 255, blue: 48 / 255, alpha: 1)
+        rimMaterial.roughness.contents = 0.8
 
-        let darkGeometry = SCNBox(width: voxelSize, height: voxelSize, length: voxelSize, chamferRadius: 0)
-        darkGeometry.materials = [darkMaterial]
+        let darkGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        darkGeom.materials = [darkMaterial]
 
-        let lightGeometry = SCNBox(width: voxelSize, height: voxelSize, length: voxelSize, chamferRadius: 0)
-        lightGeometry.materials = [lightMaterial]
+        let baseGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        baseGeom.materials = [baseMaterial]
 
-        // Build a 3x2x3 pot
-        for x in -1 ... 1 {
-            for y in 0 ... 1 {
-                for z in -1 ... 1 {
+        let rimGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        rimGeom.materials = [rimMaterial]
+
+        // Layer definitions: (outerRadius, innerRadius)
+        let layers: [(Float, Float)] = [
+            (1.5, 0.0), // Y=0 bottom, solid
+            (2.0, 1.0), // Y=1
+            (2.5, 1.5), // Y=2
+            (3.0, 2.0), // Y=3
+            (3.5, 2.5) // Y=4 rim
+        ]
+
+        for (yLayer, (outerRadius, innerRadius)) in layers.enumerated() {
+            let yPos = Float(yLayer) * bs
+            let isRim = yLayer == 4
+            let isBottom = yLayer == 0
+
+            for bx in -4 ... 4 {
+                for bz in -4 ... 4 {
+                    let dist = sqrt(Float(bx * bx + bz * bz))
+                    let inOuter = dist <= outerRadius
+                    let inInner = dist <= innerRadius
+                    guard inOuter && (isBottom || !inInner) else { continue }
+
                     let node = SCNNode()
-                    // Use different shades for visual interest
-                    if y == 0, x == 0 || z == 0 {
-                        node.geometry = darkGeometry
-                    } else if y == 1, x == 0, z == 0 {
-                        // Top center is empty (soil area / tree anchor)
-                        continue
-                    } else if y == 1 {
-                        node.geometry = lightGeometry
+                    if isRim {
+                        node.geometry = rimGeom
+                    } else if isBottom || dist > innerRadius - 0.5 {
+                        node.geometry = darkGeom
                     } else {
-                        node.geometry = baseGeometry
+                        node.geometry = baseGeom
                     }
-                    node.position = SCNVector3(Float(x), Float(y), Float(z))
+                    node.position = SCNVector3(Float(bx) * bs, yPos, Float(bz) * bs)
                     potParent.addChildNode(node)
                 }
             }
@@ -189,20 +201,30 @@ final class BonsaiScene {
         pot.name = "pot"
         rotationNode.addChildNode(pot)
 
-        // Add soil on top center
-        let soilGeometry = SCNBox(width: voxelSize, height: voxelSize, length: voxelSize, chamferRadius: 0)
+        // Soil: fill interior of rim layer (Y=4, dist <= innerRadius of rim = 2.5)
         let soilMaterial = SCNMaterial()
         soilMaterial.diffuse.contents = UIColor(red: 45 / 255, green: 35 / 255, blue: 25 / 255, alpha: 1)
         soilMaterial.roughness.contents = 0.9
-        soilGeometry.materials = [soilMaterial]
+        let soilGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        soilGeom.materials = [soilMaterial]
 
-        let soilNode = SCNNode(geometry: soilGeometry)
-        soilNode.position = SCNVector3(0, 1, 0)
-        soilNode.name = "soil"
-        rotationNode.addChildNode(soilNode)
+        let soilParent = SCNNode()
+        let rimY = Float(4) * bs
+        for bx in -4 ... 4 {
+            for bz in -4 ... 4 {
+                let dist = sqrt(Float(bx * bx + bz * bz))
+                guard dist <= 2.5 else { continue }
+                let soilNode = SCNNode(geometry: soilGeom)
+                soilNode.position = SCNVector3(Float(bx) * bs, rimY, Float(bz) * bs)
+                soilParent.addChildNode(soilNode)
+            }
+        }
+        let soil = soilParent.flattenedClone()
+        soil.name = "soil"
+        rotationNode.addChildNode(soil)
 
-        // Tree anchor sits above the pot
-        treeAnchor.position = SCNVector3(0, 2, 0)
+        // Tree anchor sits above the pot (5 layers * blockSize)
+        treeAnchor.position = SCNVector3(0, Float(5) * bs, 0)
         treeAnchor.name = "treeAnchor"
         rotationNode.addChildNode(treeAnchor)
     }

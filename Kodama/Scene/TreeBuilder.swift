@@ -18,7 +18,8 @@ struct VoxelBlockData {
     let parentIndex: Int?
 
     func overlaps(x ox: Float, y oy: Float, z oz: Float) -> Bool {
-        abs(x - ox) < 0.5 && abs(y - oy) < 0.5 && abs(z - oz) < 0.5
+        abs(x - ox) < VoxelConstants.halfBlock && abs(y - oy) < VoxelConstants.halfBlock && abs(z - oz) < VoxelConstants
+            .halfBlock
     }
 
     var positionKey: PositionKey {
@@ -34,7 +35,9 @@ struct PositionKey: Hashable {
     let z: Float
 
     static let faceOffsets: [(Float, Float, Float)] = [
-        (0, -1, 0), (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1)
+        (0, -VoxelConstants.blockSize, 0), (0, VoxelConstants.blockSize, 0),
+        (VoxelConstants.blockSize, 0, 0), (-VoxelConstants.blockSize, 0, 0),
+        (0, 0, VoxelConstants.blockSize), (0, 0, -VoxelConstants.blockSize)
     ]
 }
 
@@ -76,30 +79,90 @@ enum TreeBuilder {
         var rng = SeededRandom(seed: seed)
         var blocks: [VoxelBlockData] = []
 
-        buildTrunk(blocks: &blocks, rng: &rng)
-        buildBranches(blocks: &blocks, rng: &rng, topIndex: 3)
-        buildCrownLeaf(blocks: &blocks, rng: &rng, topIndex: 3)
+        let topCenterIndex = buildTrunk(blocks: &blocks, rng: &rng)
+        buildBranches(blocks: &blocks, rng: &rng, topIndex: topCenterIndex)
+        buildCrownLeaf(blocks: &blocks, rng: &rng, topIndex: topCenterIndex)
 
         return blocks
     }
 
-    private static func buildTrunk(blocks: inout [VoxelBlockData], rng: inout SeededRandom) {
-        for y in 0 ..< 4 {
-            let color = trunkColors[Int(rng.next() % UInt64(trunkColors.count))]
-            blocks.append(VoxelBlockData(
-                x: 0,
-                y: Float(y),
-                z: 0,
-                blockType: .trunk,
-                colorHex: color,
-                parentIndex: y > 0 ? y - 1 : nil
-            ))
+    @discardableResult
+    private static func buildTrunk(blocks: inout [VoxelBlockData], rng: inout SeededRandom) -> Int {
+        let blockSize = VoxelConstants.blockSize
+
+        // Radius per yIdx layer (in block-grid units)
+        // yIdx 0-1: radius 2.5, yIdx 2-3: radius 1.5, yIdx 4-5: radius 1.0, yIdx 6-7: radius 0.0 (center only)
+        let radii: [Float] = [2.5, 2.5, 1.5, 1.5, 1.0, 1.0, 0.0, 0.0]
+
+        var topCenterIndex = 0
+
+        for yIdx in 0 ..< 8 {
+            let radius = radii[yIdx]
+            let yWorld = Float(yIdx) * blockSize
+            let iRadius = Int(ceil(radius))
+
+            // Collect positions for this layer, sorted for deterministic ordering
+            var layerPositions: [(bx: Int, bz: Int)] = []
+            for bx in -iRadius ... iRadius {
+                for bz in -iRadius ... iRadius where sqrt(Float(bx * bx + bz * bz)) <= radius {
+                    layerPositions.append((bx, bz))
+                }
+            }
+            // Sort for deterministic iteration order
+            layerPositions.sort { lhs, rhs in
+                lhs.bx == rhs.bx ? lhs.bz < rhs.bz : lhs.bx < rhs.bx
+            }
+
+            for pos in layerPositions {
+                let xWorld = Float(pos.bx) * blockSize
+                let zWorld = Float(pos.bz) * blockSize
+
+                // Find parent: block in the layer below with closest XZ position
+                var parentIdx: Int?
+                if yIdx > 0 {
+                    var bestDist = Float.greatestFiniteMagnitude
+                    for (i, candidate) in blocks.enumerated() {
+                        // Only consider blocks from the layer just below (yIdx-1)
+                        let expectedY = Float(yIdx - 1) * blockSize
+                        guard abs(candidate.y - expectedY) < 0.001 else { continue }
+                        let dx = candidate.x - xWorld
+                        let dz = candidate.z - zWorld
+                        let dist = dx * dx + dz * dz
+                        if dist < bestDist {
+                            bestDist = dist
+                            parentIdx = i
+                        }
+                    }
+                }
+
+                let color = trunkColors[Int(rng.next() % UInt64(trunkColors.count))]
+                let idx = blocks.count
+
+                blocks.append(VoxelBlockData(
+                    x: xWorld,
+                    y: yWorld,
+                    z: zWorld,
+                    blockType: .trunk,
+                    colorHex: color,
+                    parentIndex: parentIdx
+                ))
+
+                // Track the top center block (x=0, z=0 at highest yIdx)
+                if pos.bx == 0, pos.bz == 0 {
+                    topCenterIndex = idx
+                }
+            }
         }
+
+        return topCenterIndex
     }
 
     private static func buildBranches(blocks: inout [VoxelBlockData], rng: inout SeededRandom, topIndex: Int) {
-        let branchCount = Int(rng.next() % 2) + 1
-        let directions: [(Float, Float)] = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        let blockSize = VoxelConstants.blockSize
+        let branchCount = Int(rng.next() % 3) + 2
+        let directions: [(Float, Float)] = [
+            (blockSize, 0), (-blockSize, 0), (0, blockSize), (0, -blockSize)
+        ]
         var usedDirections: Set<Int> = []
 
         for _ in 0 ..< branchCount {
@@ -111,14 +174,48 @@ enum TreeBuilder {
 
             let dir = directions[dirIndex]
             let branchColor = branchColors[Int(rng.next() % UInt64(branchColors.count))]
-            let branchIndex = blocks.count
+            let branchLength = Int(rng.next() % 4) + 2
 
-            blocks.append(VoxelBlockData(
-                x: dir.0, y: Float(topIndex), z: dir.1,
-                blockType: .branch, colorHex: branchColor, parentIndex: topIndex
-            ))
+            // Choose branch origin: center column block at yIdx 5 or 6 (60-80% of trunk height)
+            let originYIdx = 5 + Int(rng.next() % 2)
+            let originY = Float(originYIdx) * blockSize
 
-            buildBranchLeaves(blocks: &blocks, rng: &rng, dir: dir, topIndex: topIndex, branchIndex: branchIndex)
+            // Find the center column block at originY as the branch origin parent
+            var originParentIdx = topIndex
+            for (i, candidate) in blocks.enumerated() {
+                if abs(candidate.x) < 0.001, abs(candidate.z) < 0.001, abs(candidate.y - originY) < 0.001 {
+                    originParentIdx = i
+                    break
+                }
+            }
+
+            // Build branch steps from trunk surface outward
+            var curX = Float(0)
+            var curY = originY
+            var curZ = Float(0)
+            var prevIdx = originParentIdx
+
+            for step in 0 ..< branchLength {
+                curX += dir.0
+                curZ += dir.1
+                // Add upward curve every other step
+                if step % 2 == 1 {
+                    curY += blockSize
+                }
+
+                let stepIdx = blocks.count
+                blocks.append(VoxelBlockData(
+                    x: curX,
+                    y: curY,
+                    z: curZ,
+                    blockType: .branch,
+                    colorHex: branchColor,
+                    parentIndex: prevIdx
+                ))
+                prevIdx = stepIdx
+            }
+
+            buildBranchLeaves(blocks: &blocks, rng: &rng, dir: dir, topIndex: prevIdx)
         }
     }
 
@@ -126,23 +223,35 @@ enum TreeBuilder {
         blocks: inout [VoxelBlockData],
         rng: inout SeededRandom,
         dir: (Float, Float),
-        topIndex: Int,
-        branchIndex: Int
+        topIndex: Int
     ) {
+        let blockSize = VoxelConstants.blockSize
+        let tipY = blocks[topIndex].y
+        let tipX = blocks[topIndex].x
+        let tipZ = blocks[topIndex].z
+
         let leafColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
         blocks.append(VoxelBlockData(
-            x: dir.0, y: Float(topIndex + 1), z: dir.1,
-            blockType: .leaf, colorHex: leafColor, parentIndex: branchIndex
+            x: tipX,
+            y: tipY + blockSize,
+            z: tipZ,
+            blockType: .leaf,
+            colorHex: leafColor,
+            parentIndex: topIndex
         ))
 
         // 50% chance of a second leaf adjacent
         if rng.next() % 2 == 0 {
             let secondLeafColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
-            let offsetX = dir.0 == 0 ? Float(Int(rng.next() % 2) == 0 ? 1 : -1) : dir.0
-            let offsetZ = dir.1 == 0 ? Float(Int(rng.next() % 2) == 0 ? 1 : -1) : dir.1
+            let offsetX = dir.0 == 0 ? (Int(rng.next() % 2) == 0 ? blockSize : -blockSize) : dir.0
+            let offsetZ = dir.1 == 0 ? (Int(rng.next() % 2) == 0 ? blockSize : -blockSize) : dir.1
             blocks.append(VoxelBlockData(
-                x: offsetX, y: Float(topIndex + 1), z: offsetZ,
-                blockType: .leaf, colorHex: secondLeafColor, parentIndex: branchIndex
+                x: tipX + offsetX,
+                y: tipY + blockSize,
+                z: tipZ + offsetZ,
+                blockType: .leaf,
+                colorHex: secondLeafColor,
+                parentIndex: topIndex
             ))
         }
     }
@@ -150,8 +259,12 @@ enum TreeBuilder {
     private static func buildCrownLeaf(blocks: inout [VoxelBlockData], rng: inout SeededRandom, topIndex: Int) {
         let crownColor = leafColors[Int(rng.next() % UInt64(leafColors.count))]
         blocks.append(VoxelBlockData(
-            x: 0, y: Float(topIndex + 1), z: 0,
-            blockType: .leaf, colorHex: crownColor, parentIndex: topIndex
+            x: 0,
+            y: blocks[topIndex].y + VoxelConstants.blockSize,
+            z: 0,
+            blockType: .leaf,
+            colorHex: crownColor,
+            parentIndex: topIndex
         ))
     }
 
@@ -180,7 +293,12 @@ enum TreeBuilder {
             return cached
         }
 
-        let box = SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0.02)
+        let box = SCNBox(
+            width: VoxelConstants.cgBlockSize,
+            height: VoxelConstants.cgBlockSize,
+            length: VoxelConstants.cgBlockSize,
+            chamferRadius: VoxelConstants.chamferRadius
+        )
         let material = SCNMaterial()
         material.diffuse.contents = UIColor(hex: colorHex)
         material.roughness.contents = 0.8

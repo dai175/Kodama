@@ -148,7 +148,8 @@ enum SeasonalEngine {
     ) {
         // Add moss on trunk base blocks (1 per week)
         let mossCount = max(1, elapsedDays / 7)
-        let trunkBaseBlocks = blocks.enumerated().filter { $0.element.blockType == .trunk && $0.element.y <= 1 }
+        let trunkBaseBlocks = blocks.enumerated()
+            .filter { $0.element.blockType == .trunk && $0.element.y <= VoxelConstants.blockSize }
 
         guard !trunkBaseBlocks.isEmpty else { return }
 
@@ -156,7 +157,10 @@ enum SeasonalEngine {
             let (_, trunkBlock) = trunkBaseBlocks[Int(rng.next() % UInt64(trunkBaseBlocks.count))]
 
             // Place moss adjacent to trunk base
-            let offsets: [(Float, Float)] = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            let offsets: [(Float, Float)] = [
+                (VoxelConstants.blockSize, 0), (-VoxelConstants.blockSize, 0),
+                (0, VoxelConstants.blockSize), (0, -VoxelConstants.blockSize)
+            ]
             let offset = offsets[Int(rng.next() % UInt64(offsets.count))]
             let mossX = trunkBlock.x + offset.0
             let mossZ = trunkBlock.z + offset.1
@@ -222,7 +226,8 @@ enum SeasonalEngine {
         result: inout SeasonalResult
     ) {
         let now = Date()
-        for (index, block) in blocks.enumerated() where block.blockType == .leaf && abs(block.y) < 0.5 {
+        for (index, block) in blocks.enumerated()
+            where block.blockType == .leaf && abs(block.y) < VoxelConstants.halfBlock {
             guard index < blockDates.count, let placedAt = blockDates[index] else { continue }
             let daysSincePlaced = Calendar.current.dateComponents([.day], from: placedAt, to: now).day ?? 0
             guard daysSincePlaced > maxDays, !result.fallenLeaves.contains(index) else { continue }
@@ -280,7 +285,7 @@ enum SeasonalEngine {
 
         for _ in 0 ..< snowCount {
             let entry = topEntries[Int(rng.next() % UInt64(topEntries.count))]
-            let snowY = entry.block.y + 1
+            let snowY = entry.block.y + VoxelConstants.blockSize
 
             // Check no snow block already exists at this position (including blocks added in this pass)
             let alreadyHasSnow = blocks.contains { b in
