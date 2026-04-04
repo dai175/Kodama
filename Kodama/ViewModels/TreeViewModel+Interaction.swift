@@ -10,12 +10,13 @@ import SwiftData
 // MARK: - User Interaction
 
 @MainActor extension TreeViewModel {
-    func handleTouch(position: SCNVector3, context: ModelContext) {
+    func handleTouch(position: SCNVector3, scene: BonsaiScene, context: ModelContext) {
         guard let tree = currentTree else { return }
+        let local = scene.treeAnchor.convertPosition(position, from: nil)
         let logicalTouch = Int3(
-            x: Int((position.x / VoxelConstants.renderScale).rounded()),
-            y: Int((position.y / VoxelConstants.renderScale).rounded()),
-            z: Int((position.z / VoxelConstants.renderScale).rounded())
+            x: Int((local.x / VoxelConstants.renderScale).rounded()),
+            y: Int((local.y / VoxelConstants.renderScale).rounded()),
+            z: Int((local.z / VoxelConstants.renderScale).rounded())
         )
         let interaction = Interaction(
             type: .touch,

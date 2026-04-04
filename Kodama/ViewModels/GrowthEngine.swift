@@ -251,7 +251,6 @@ nonisolated enum GrowthEngine {
 
         var result: [GrowthNode] = []
         var localFoliage = state.foliageOccupied
-        var nextID = state.nextNodeID
 
         for offset in offsets.prefix(clusterCount) {
             let pos = parent.pos.adding(offset)
@@ -264,11 +263,10 @@ nonisolated enum GrowthEngine {
             guard crowding < 5 else { continue }
             let blockType: BlockType = if season == .spring, Int(rng.next() % 100) < 14 { .flower } else { .leaf }
             result.append(GrowthNode(
-                nodeID: nextID, blockID: UUID(), pos: pos,
+                nodeID: -1, blockID: UUID(), pos: pos,
                 layer: .foliage, blockType: blockType, parentNodeID: parent.nodeID
             ))
             localFoliage.insert(pos)
-            nextID += 1
         }
 
         return result.isEmpty ? nil : result
@@ -300,6 +298,10 @@ nonisolated enum GrowthEngine {
                     }
             } else {
                 growFoliageCluster(state: state, season: season, rng: &rng)?.first
+                    .map { raw in
+                        GrowthNode(nodeID: state.nextNodeID, blockID: raw.blockID, pos: raw.pos,
+                                   layer: raw.layer, blockType: raw.blockType, parentNodeID: raw.parentNodeID)
+                    }
             }
             guard let node = newNode, node.pos.y >= 0 else { continue }
             if node.layer == .wood {
@@ -322,9 +324,11 @@ nonisolated enum GrowthEngine {
         season: Season
     ) {
         let cluster = growFoliageCluster(state: state, season: season, rng: &rng) ?? []
-        for node in cluster {
+        for raw in cluster {
             guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
-            guard !state.foliageOccupied.contains(node.pos), node.pos.y >= 0 else { continue }
+            guard !state.foliageOccupied.contains(raw.pos), raw.pos.y >= 0 else { continue }
+            let node = GrowthNode(nodeID: state.nextNodeID, blockID: raw.blockID, pos: raw.pos,
+                                  layer: raw.layer, blockType: raw.blockType, parentNodeID: raw.parentNodeID)
             state.foliageOccupied.insert(node.pos)
             state.allNodes.append(node)
             state.newNodes.append(node)

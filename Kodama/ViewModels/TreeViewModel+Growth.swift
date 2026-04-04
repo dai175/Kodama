@@ -186,7 +186,6 @@ import SwiftData
         for blockData in blocks {
             let key = StorageKey(position: blockData.pos, layer: GridMapper.layer(for: blockData.blockType))
             if let existingBlock = existingByLayer[key] {
-                existingBlock.id = blockData.id
                 existingBlock.blockType = blockData.blockType
                 existingBlock.colorHex = blockData.colorHex
                 existingBlock.parentBlockID = blockData.parentID
@@ -298,17 +297,19 @@ import SwiftData
 
     private func ensureEngineCompatibility(context: ModelContext) {
         let savedVersion = UserDefaults.standard.integer(forKey: engineSchemaVersionKey)
-        guard savedVersion != 0, savedVersion == engineSchemaVersion else {
-            do {
-                try context.delete(model: VoxelBlock.self)
-                try context.delete(model: Interaction.self)
-                try context.delete(model: BonsaiTree.self)
-                try context.save()
-                UserDefaults.standard.set(engineSchemaVersion, forKey: engineSchemaVersionKey)
-            } catch {
-                print("Failed to reset incompatible engine data: \(error)")
-            }
+        if savedVersion == 0 {
+            UserDefaults.standard.set(engineSchemaVersion, forKey: engineSchemaVersionKey)
             return
+        }
+        if savedVersion == engineSchemaVersion { return }
+        do {
+            try context.delete(model: VoxelBlock.self)
+            try context.delete(model: Interaction.self)
+            try context.delete(model: BonsaiTree.self)
+            try context.save()
+            UserDefaults.standard.set(engineSchemaVersion, forKey: engineSchemaVersionKey)
+        } catch {
+            print("Failed to reset incompatible engine data: \(error)")
         }
     }
 
@@ -381,7 +382,7 @@ import SwiftData
         guard let root = treeRoot else { return }
 
         let allChildren = root.childNodes.flatMap { node -> [SCNNode] in
-            node.name == "treeDynamic" || node.name == "treeRoot" ? Array(node.childNodes) : [node]
+            node.name == "treeDynamic" ? Array(node.childNodes) : [node]
         }
         let newNodes = Array(allChildren.suffix(count))
         GrowthAnimator.animateNewBlocks(nodes: newNodes)
