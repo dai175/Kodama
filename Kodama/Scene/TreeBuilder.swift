@@ -32,6 +32,10 @@ struct PositionKey: Hashable {
     let x: Float
     let y: Float
     let z: Float
+
+    static let faceOffsets: [(Float, Float, Float)] = [
+        (0, -1, 0), (0, 1, 0), (1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1)
+    ]
 }
 
 // MARK: - SeededRandom
