@@ -83,7 +83,7 @@ enum GrowthEngine {
             let growthCount = blocksPerTick(season: season, rng: &rng)
 
             for _ in 0 ..< growthCount {
-                guard allBlocks.count < 2000 else { return newBlocks }
+                guard allBlocks.count < VoxelConstants.maxBlocks else { return newBlocks }
 
                 if let (block, usedTipIndex) = growBlock(
                     allBlocks: allBlocks,
@@ -105,11 +105,11 @@ enum GrowthEngine {
                 }
             }
 
-            // Trigger thickening near every 50-block milestone; window accounts for multi-block ticks
-            if allBlocks.count >= 50, allBlocks.count % 50 < growthCount + 1 {
+            // Trigger thickening near every 30-block milestone; window accounts for multi-block ticks
+            if allBlocks.count >= 30, allBlocks.count % 30 < growthCount + 1 {
                 let thickenBlocks = thickenTrunk(allBlocks: allBlocks, occupiedPositions: &occupiedPositions, rng: &rng)
                 for block in thickenBlocks {
-                    guard allBlocks.count < 2000 else { break }
+                    guard allBlocks.count < VoxelConstants.maxBlocks else { break }
                     let newIndex = allBlocks.count
                     if let pi = block.parentIndex {
                         parentIndices.insert(pi)
@@ -253,10 +253,11 @@ enum GrowthEngine {
         rng: inout SeededRandom,
         pendingInteractions: [Interaction]
     ) -> (Float, Float, Float) {
+        let bs = VoxelConstants.blockSize
         let directions: [(Float, Float, Float)] = [
-            (0, 1, 0), // up
-            (1, 0, 0), (-1, 0, 0), // lateral X
-            (0, 0, 1), (0, 0, -1) // lateral Z
+            (0, bs, 0), // up
+            (bs, 0, 0), (-bs, 0, 0), // lateral X
+            (0, 0, bs), (0, 0, -bs) // lateral Z
         ]
 
         let weights: [Double] = [
@@ -317,28 +318,44 @@ enum GrowthEngine {
         occupiedPositions: inout Set<PositionKey>,
         rng: inout SeededRandom
     ) -> [VoxelBlockData] {
-        let trunkBlocks = allBlocks.enumerated().filter { $0.element.blockType == .trunk }
-        guard !trunkBlocks.isEmpty else { return [] }
+        let bs = VoxelConstants.blockSize
+        let thickenableBlocks = allBlocks.enumerated().filter {
+            $0.element.blockType == .trunk || $0.element.blockType == .branch
+        }
+        guard !thickenableBlocks.isEmpty else { return [] }
+
+        let maxY = thickenableBlocks.map(\.element.y).max() ?? 1
+
+        // Weight lower blocks higher (lower normalized height = higher weight)
+        // Branch blocks get 0.3x the weight of trunk blocks
+        let weights: [Double] = thickenableBlocks.map { _, block in
+            let normalizedHeight = maxY > 0 ? Double(block.y / maxY) : 0
+            let baseWeight = 1.0 - normalizedHeight
+            return block.blockType == .trunk ? baseWeight : baseWeight * 0.3
+        }
+
+        let indices = thickenableBlocks.indices.map(\.self)
+        let selectedLocalIndex = weightedSelect(indices: Array(indices), weights: weights, rng: &rng)
+        let (blockIndex, selectedBlock) = thickenableBlocks[selectedLocalIndex]
 
         var newBlocks: [VoxelBlockData] = []
-        let adjacentOffsets: [(Float, Float)] = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-
-        // Pick a random trunk block to thicken
-        let (trunkIndex, trunkBlock) = trunkBlocks[Int(rng.next() % UInt64(trunkBlocks.count))]
+        let adjacentOffsets: [(Float, Float)] = [(bs, 0), (-bs, 0), (0, bs), (0, -bs)]
 
         for offset in adjacentOffsets {
-            let newX = trunkBlock.x + offset.0
-            let newZ = trunkBlock.z + offset.1
+            let newX = selectedBlock.x + offset.0
+            let newZ = selectedBlock.z + offset.1
 
-            if !occupiedPositions.contains(PositionKey(x: newX, y: trunkBlock.y, z: newZ)) {
-                let color = TreeBuilder.trunkColors[Int(rng.next() % UInt64(TreeBuilder.trunkColors.count))]
+            if !occupiedPositions.contains(PositionKey(x: newX, y: selectedBlock.y, z: newZ)) {
+                // Outer blocks use outerTrunkColors for year-ring effect
+                let color = VoxelConstants
+                    .outerTrunkColors[Int(rng.next() % UInt64(VoxelConstants.outerTrunkColors.count))]
                 newBlocks.append(VoxelBlockData(
                     x: newX,
-                    y: trunkBlock.y,
+                    y: selectedBlock.y,
                     z: newZ,
                     blockType: .trunk,
                     colorHex: color,
-                    parentIndex: trunkIndex
+                    parentIndex: blockIndex
                 ))
                 break // Only add one thickening block per cycle
             }
