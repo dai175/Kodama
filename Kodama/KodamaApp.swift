@@ -16,6 +16,8 @@ struct KodamaApp: App {
         let schema = Schema([
             BonsaiTree.self,
             VoxelBlock.self,
+            BranchSegment.self,
+            LeafCluster.self,
             Interaction.self
         ])
 

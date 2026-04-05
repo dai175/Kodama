@@ -53,6 +53,8 @@ import SwiftData
     func resetTree(context: ModelContext) {
         do {
             try context.delete(model: VoxelBlock.self)
+            try context.delete(model: LeafCluster.self)
+            try context.delete(model: BranchSegment.self)
             try context.delete(model: Interaction.self)
             try context.delete(model: BonsaiTree.self)
             try context.save()
@@ -324,6 +326,8 @@ import SwiftData
         if savedVersion == engineSchemaVersion { return }
         do {
             try context.delete(model: VoxelBlock.self)
+            try context.delete(model: LeafCluster.self)
+            try context.delete(model: BranchSegment.self)
             try context.delete(model: Interaction.self)
             try context.delete(model: BonsaiTree.self)
             try context.save()
