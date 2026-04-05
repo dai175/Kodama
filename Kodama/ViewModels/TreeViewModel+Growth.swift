@@ -4,8 +4,11 @@
 //
 
 import Foundation
+import OSLog
 import SceneKit
 import SwiftData
+
+private let logger = Logger(subsystem: "com.daisuke.Kodama", category: "Growth")
 
 // MARK: - Growth
 
@@ -45,6 +48,7 @@ import SwiftData
             // tree directly.
             createNewTree(context: context)
         } catch {
+            logger.error("Failed to reset tree: \(error)")
             assertionFailure("Failed to reset tree: \(error)")
         }
     }
@@ -110,7 +114,7 @@ import SwiftData
                 renderer: renderer
             )
         } catch {
-            print("Failed to save vector growth changes: \(error)")
+            logger.error("Failed to save vector growth changes: \(error)")
         }
     }
 
@@ -284,7 +288,7 @@ import SwiftData
             try context.save()
             UserDefaults.standard.set(engineSchemaVersion, forKey: engineSchemaVersionKey)
         } catch {
-            print("Failed to save new tree: \(error)")
+            logger.error("Failed to save new tree: \(error)")
         }
     }
 
@@ -345,7 +349,7 @@ import SwiftData
             try context.save()
             UserDefaults.standard.set(engineSchemaVersion, forKey: engineSchemaVersionKey)
         } catch {
-            print("Failed to reset incompatible engine data: \(error)")
+            logger.error("Failed to reset incompatible engine data: \(error)")
         }
     }
 }
