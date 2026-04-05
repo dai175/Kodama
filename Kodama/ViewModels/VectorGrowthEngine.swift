@@ -159,11 +159,11 @@ nonisolated enum VectorGrowthEngine {
     }
 
     private static func pickMidPoint(on segment: SegmentSnapshot, rng: inout SeededRandom) -> Float3 {
-        let t = 0.4 + Float(rng.next() % 1000) / 1000.0 * 0.5 // 0.4..0.9
+        let progress = 0.4 + Float(rng.next() % 1000) / 1000.0 * 0.5 // 0.4..0.9
         return Float3(
-            x: segment.start.x + (segment.end.x - segment.start.x) * t,
-            y: segment.start.y + (segment.end.y - segment.start.y) * t,
-            z: segment.start.z + (segment.end.z - segment.start.z) * t
+            x: segment.start.x + (segment.end.x - segment.start.x) * progress,
+            y: segment.start.y + (segment.end.y - segment.start.y) * progress,
+            z: segment.start.z + (segment.end.z - segment.start.z) * progress
         )
     }
 
@@ -190,11 +190,16 @@ nonisolated enum VectorGrowthEngine {
             let descendants = descendantCounts[segment.id] ?? 0
             let ageDays = max(0, Float(currentDate.timeIntervalSince(segment.createdAt) / 86400))
             let maxThickness = segment.kind == .trunk ? trunkThicknessMax : branchThicknessMax
-            let thickness = min(
+            let computed = min(
                 maxThickness,
                 newSegmentThickness + ageDays * ageFactor + Float(descendants) * descendantFactor
             )
-            if abs(thickness - segment.thickness) > 0.001 {
+            // Thickness is monotonic — branches harden over time, they never
+            // thin out. This also guards against an initial trunk (created
+            // with a bespoke starting thickness) being rewritten below its
+            // starting value before aging catches up.
+            let thickness = max(segment.thickness, computed)
+            if thickness - segment.thickness > 0.001 {
                 state.result.segmentThicknessUpdates[segment.id] = thickness
             }
             state.result.segmentDescendantCountUpdates[segment.id] = descendants
