@@ -9,6 +9,8 @@ import SceneKit
 import Testing
 
 struct KodamaTests {
+    // MARK: - Interaction Model
+
     @Test func interactionTouchCoordinatesUseIntegers() {
         let interaction = Interaction(type: .touch, touchX: 2, touchY: -1, touchZ: 5)
 
@@ -17,188 +19,101 @@ struct KodamaTests {
         #expect(interaction.touchZ == 5)
     }
 
-    @Test func growthLongRunDoesNotStallAndRespectsUpperBound() {
-        let tree = BonsaiTree(seed: 42)
-        let initial = TreeBuilder.buildSapling(seed: 42)
-        tree.totalBlocks = initial.count
+    // MARK: - Sapling Generation
 
-        let start = makeDate(year: 2026, month: 1, day: 1)
+    @Test func saplingProducesTrunkAndCluster() {
+        let sapling = SkeletonBuilder.buildSapling(seed: 42)
+        #expect(!sapling.segments.isEmpty)
+        #expect(sapling.segments.first?.kind == .trunk)
+        #expect(!sapling.leafClusters.isEmpty)
+    }
+
+    @Test func saplingGenerationIsDeterministic() {
+        let first = SkeletonBuilder.buildSapling(seed: 7)
+        let second = SkeletonBuilder.buildSapling(seed: 7)
+        #expect(first.segments.count == second.segments.count)
+        #expect(first.segments[0].start == second.segments[0].start)
+        #expect(first.segments[0].end == second.segments[0].end)
+    }
+
+    // MARK: - End-to-End: Skeleton → Growth → Rasterize
+
+    @Test func fullPipelineProducesRenderableVoxels() {
+        let sapling = SkeletonBuilder.buildSapling(seed: 123)
+        let start = makeDate(year: 2026, month: 5, day: 1)
         let end = makeDate(year: 2026, month: 7, day: 1)
+        var ages: [UUID: Date] = [:]
+        for segment in sapling.segments {
+            ages[segment.id] = start
+        }
 
-        let result = GrowthEngine.calculateGrowth(
-            tree: tree,
-            existingBlocks: initial,
-            since: start,
+        let input = VectorGrowthInput(
+            seed: 123,
+            segments: sapling.segments,
+            leafClusters: sapling.leafClusters,
+            segmentAges: ages,
+            lastEval: start,
             currentDate: end,
-            maxElapsedHours: 24 * 180
+            interactions: [],
+            maxElapsedHours: 24 * 62
         )
 
-        #expect(!result.newBlocks.isEmpty)
-        #expect(initial.count + result.newBlocks.count <= VoxelConstants.maxBlocks)
-    }
+        let result = VectorGrowthEngine.calculate(input)
 
-    @Test func growthHasNoDuplicatePositions() {
-        let tree = BonsaiTree(seed: 77)
-        let initial = TreeBuilder.buildSapling(seed: 77)
-        tree.totalBlocks = initial.count
-
-        let start = makeDate(year: 2026, month: 4, day: 1)
-        let end = makeDate(year: 2026, month: 5, day: 1)
-
-        let result = GrowthEngine.calculateGrowthWithSeasons(
-            tree: tree,
-            existingBlocks: initial,
-            since: start,
-            currentDate: end,
-            maxElapsedHours: 24 * 30
-        )
-
-        // Exclude foliage blocks evicted by branch-over-foliage replacement
-        let evictedIDs = Set(result.removedBlockIDs)
-        let all = initial.filter { !evictedIDs.contains($0.id) }
-            + result.newBlocks
-            + result.seasonalEffects.newSnowBlocks
-            + result.seasonalEffects.newMossBlocks
-        var positions = Set<Int3>()
-
-        for block in all {
-            let pos = block.pos
-            #expect(!positions.contains(pos), "duplicate position \(pos) for \(block.blockType)")
-            positions.insert(pos)
-        }
-    }
-
-    @Test func noFoliageOverlapsBranchAfterFullGrowth() {
-        let tree = BonsaiTree(seed: 42)
-        let initial = TreeBuilder.buildSapling(seed: 42)
-        tree.totalBlocks = initial.count
-
-        let start = makeDate(year: 2026, month: 1, day: 1)
-        let end = makeDate(year: 2027, month: 1, day: 1)
-
-        let result = GrowthEngine.calculateGrowthWithSeasons(
-            tree: tree,
-            existingBlocks: initial,
-            since: start,
-            currentDate: end,
-            maxElapsedHours: 24 * 365
-        )
-
-        // Exclude foliage blocks evicted by branch-over-foliage replacement
-        let evictedIDs = Set(result.removedBlockIDs)
-        let all = initial.filter { !evictedIDs.contains($0.id) }
-            + result.newBlocks
-            + result.seasonalEffects.newSnowBlocks
-            + result.seasonalEffects.newMossBlocks
-        var woodPositions = Set<Int3>()
-        for block in all where GridMapper.layer(for: block.blockType) == .wood {
-            woodPositions.insert(block.pos)
-        }
-        for block in all where GridMapper.layer(for: block.blockType) == .foliage {
-            #expect(
-                !woodPositions.contains(block.pos),
-                "foliage \(block.blockType) at \(block.pos) overlaps branch/trunk"
-            )
-        }
-    }
-
-    @Test func newLeafDoesNotOverlapExistingBranch() {
-        let tree = BonsaiTree(seed: 123)
-        let initial = TreeBuilder.buildSapling(seed: 123)
-        tree.totalBlocks = initial.count
-
-        let start = makeDate(year: 2026, month: 3, day: 1)
-        let end = makeDate(year: 2026, month: 9, day: 1)
-
-        let result = GrowthEngine.calculateGrowth(
-            tree: tree,
-            existingBlocks: initial,
-            since: start,
-            currentDate: end,
-            maxElapsedHours: 24 * 180
-        )
-
-        // Build the full picture: existing (minus evicted) + newly grown
-        let evictedIDs = Set(result.removedBlockIDs)
-        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
-        var woodPositions = Set<Int3>()
-        for block in all where GridMapper.layer(for: block.blockType) == .wood {
-            woodPositions.insert(block.pos)
-        }
-        let newFoliage = result.newBlocks.filter { GridMapper.layer(for: $0.blockType) == .foliage }
-        for block in newFoliage {
-            #expect(
-                !woodPositions.contains(block.pos),
-                "new leaf/foliage placed on top of existing branch at \(block.pos)"
-            )
-        }
-    }
-
-    @Test func growthParentReferenceIsAlwaysValidAndAcyclic() {
-        let tree = BonsaiTree(seed: 123)
-        let initial = TreeBuilder.buildSapling(seed: 123)
-        tree.totalBlocks = initial.count
-
-        let start = makeDate(year: 2026, month: 3, day: 1)
-        let end = makeDate(year: 2026, month: 8, day: 1)
-
-        let result = GrowthEngine.calculateGrowth(
-            tree: tree,
-            existingBlocks: initial,
-            since: start,
-            currentDate: end,
-            maxElapsedHours: 24 * 153
-        )
-
-        let evictedIDs = Set(result.removedBlockIDs)
-        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
-
-        for (index, block) in all.enumerated() {
-            guard let parentID = block.parentID else { continue }
-            let parentIndex = all.firstIndex(where: { $0.id == parentID })
-            #expect(parentIndex != nil)
-            #expect(parentIndex != index)
-
-            var visited = Set<Int>()
-            var cursor: Int? = index
-            var hops = 0
-            while let current = cursor {
-                #expect(current >= 0)
-                #expect(current < all.count)
-                #expect(!visited.contains(current))
-                visited.insert(current)
-                if let nextParentID = all[current].parentID {
-                    cursor = all.firstIndex(where: { $0.id == nextParentID })
-                } else {
-                    cursor = nil
-                }
-                hops += 1
-                #expect(hops <= all.count)
+        // Apply results into a mutable skeleton, then rasterize.
+        var segments = sapling.segments + result.newSegments
+        for i in segments.indices {
+            if let newThickness = result.segmentThicknessUpdates[segments[i].id] {
+                segments[i] = SegmentSnapshot(
+                    id: segments[i].id,
+                    kind: segments[i].kind,
+                    start: segments[i].start,
+                    end: segments[i].end,
+                    thickness: newThickness,
+                    colorHex: segments[i].colorHex,
+                    parentID: segments[i].parentID
+                )
             }
         }
+
+        var clusters = sapling.leafClusters
+        let removed = Set(result.removedClusterIDs)
+        clusters = clusters.filter { !removed.contains($0.id) }
+        for i in clusters.indices {
+            if let update = result.clusterUpdates[clusters[i].id] {
+                clusters[i] = LeafClusterSnapshot(
+                    id: clusters[i].id,
+                    segmentID: clusters[i].segmentID,
+                    center: clusters[i].center,
+                    radius: update.radius,
+                    density: update.density,
+                    colorHex: update.colorHex,
+                    scatterSeed: clusters[i].scatterSeed
+                )
+            }
+        }
+        clusters += result.newClusters
+
+        let blocks = VoxelRasterizer.rasterize(segments: segments, leafClusters: clusters)
+
+        #expect(!blocks.isEmpty)
+        #expect(blocks.count <= VoxelConstants.maxBlocks)
+        #expect(blocks.contains { $0.blockType == .trunk })
+        #expect(blocks.contains { $0.blockType == .leaf })
     }
 
-    @Test func trunkBranchAndFoliageAllAppearOverTime() {
-        let tree = BonsaiTree(seed: 999)
-        let initial = TreeBuilder.buildSapling(seed: 999)
-        tree.totalBlocks = initial.count
-
-        let start = makeDate(year: 2026, month: 4, day: 1)
-        let end = makeDate(year: 2026, month: 7, day: 1)
-
-        let result = GrowthEngine.calculateGrowth(
-            tree: tree,
-            existingBlocks: initial,
-            since: start,
-            currentDate: end,
-            maxElapsedHours: 24 * 91
+    @Test func rasterizedOutputHasNoDuplicatePositions() {
+        let sapling = SkeletonBuilder.buildSapling(seed: 77)
+        let blocks = VoxelRasterizer.rasterize(
+            segments: sapling.segments,
+            leafClusters: sapling.leafClusters
         )
 
-        let evictedIDs = Set(result.removedBlockIDs)
-        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
-        #expect(all.contains { $0.blockType == .trunk })
-        #expect(all.contains { $0.blockType == .branch })
-        #expect(all.contains { $0.blockType == .leaf || $0.blockType == .flower })
+        var positions = Set<Int3>()
+        for block in blocks {
+            #expect(!positions.contains(block.pos), "duplicate position \(block.pos) for \(block.blockType)")
+            positions.insert(block.pos)
+        }
     }
 
     @Test func rendererAppliesRenderScaleOnlyAtSceneBuildTime() throws {
@@ -214,8 +129,54 @@ struct KodamaTests {
         #expect(abs(node.position.y - Float(blocks[0].pos.y) * VoxelConstants.renderScale) < tolerance)
         #expect(abs(node.position.z - Float(blocks[0].pos.z) * VoxelConstants.renderScale) < tolerance)
     }
-}
 
+    // MARK: - Segment Hierarchy Integrity
+
+    @Test func segmentHierarchyIsValidAndAcyclic() {
+        let sapling = SkeletonBuilder.buildSapling(seed: 5)
+        let start = makeDate(year: 2026, month: 3, day: 1)
+        let end = makeDate(year: 2026, month: 8, day: 1)
+        var ages: [UUID: Date] = [:]
+        for segment in sapling.segments {
+            ages[segment.id] = start
+        }
+
+        let input = VectorGrowthInput(
+            seed: 5,
+            segments: sapling.segments,
+            leafClusters: sapling.leafClusters,
+            segmentAges: ages,
+            lastEval: start,
+            currentDate: end,
+            interactions: [],
+            maxElapsedHours: 24 * 153
+        )
+        let result = VectorGrowthEngine.calculate(input)
+        let allSegments = sapling.segments + result.newSegments
+        let idSet = Set(allSegments.map(\.id))
+
+        for segment in allSegments {
+            guard let parentID = segment.parentID else { continue }
+            #expect(idSet.contains(parentID), "segment \(segment.id) references unknown parent")
+            #expect(parentID != segment.id, "segment cannot be its own parent")
+        }
+
+        // Walk each parent chain to ensure acyclicity.
+        let byID = Dictionary(uniqueKeysWithValues: allSegments.map { ($0.id, $0) })
+        for segment in allSegments {
+            var visited = Set<UUID>()
+            var cursor: UUID? = segment.id
+            var hops = 0
+            while let current = cursor {
+                #expect(!visited.contains(current))
+                visited.insert(current)
+                cursor = byID[current]?.parentID
+                hops += 1
+                #expect(hops <= allSegments.count)
+            }
+        }
+    }
+}
 
 private func makeDate(year: Int, month: Int, day: Int) -> Date {
     var components = DateComponents()

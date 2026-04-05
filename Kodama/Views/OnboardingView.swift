@@ -112,8 +112,12 @@ private struct OnboardingSaplingView: UIViewRepresentable {
         let scnView = SCNView()
         let bonsaiScene = BonsaiScene()
 
-        // Build a small static sapling
-        let saplingBlocks = TreeBuilder.buildSapling(seed: 42)
+        // Build a small static sapling from the vector skeleton and rasterize.
+        let sapling = SkeletonBuilder.buildSapling(seed: 42)
+        let saplingBlocks = VoxelRasterizer.rasterize(
+            segments: sapling.segments,
+            leafClusters: sapling.leafClusters
+        )
         let renderer = BonsaiRenderer(bonsaiScene: bonsaiScene)
         renderer.renderTree(from: saplingBlocks)
 
