@@ -26,17 +26,26 @@ import SwiftData
 
     func resetTree(context: ModelContext) {
         do {
-            try context.delete(model: VoxelBlock.self)
-            try context.delete(model: LeafCluster.self)
-            try context.delete(model: BranchSegment.self)
-            try context.delete(model: Interaction.self)
-            try context.delete(model: BonsaiTree.self)
+            // Delete existing trees via instance-level deletion so cascade
+            // relationships (blocks / segments / leafClusters / interactions)
+            // are flushed cleanly. Batch `context.delete(model:)` has been
+            // observed to leave zombie instances that a subsequent fetch
+            // can still return, which caused Reset Tree to appear inert.
+            let existing = (try? context.fetch(FetchDescriptor<BonsaiTree>())) ?? []
+            for tree in existing {
+                context.delete(tree)
+            }
             try context.save()
+
             blocks = []
             currentTree = nil
-            loadOrCreateTree(context: context)
+
+            // Skip loadOrCreateTree to avoid re-fetching from a context that
+            // may still hold references to just-deleted objects. Create a new
+            // tree directly.
+            createNewTree(context: context)
         } catch {
-            print("Failed to reset tree: \(error)")
+            assertionFailure("Failed to reset tree: \(error)")
         }
     }
 
