@@ -4,8 +4,11 @@
 //
 
 import Foundation
+import OSLog
 import SceneKit
 import SwiftData
+
+private let logger = Logger(subsystem: "com.daisuke.Kodama", category: "Interaction")
 
 // MARK: - User Interaction
 
@@ -29,7 +32,7 @@ import SwiftData
         do {
             try context.save()
         } catch {
-            print("Failed to save touch interaction: \(error)")
+            logger.error("Failed to save touch interaction: \(error)")
         }
     }
 
@@ -41,7 +44,7 @@ import SwiftData
         do {
             try context.save()
         } catch {
-            print("Failed to save color interaction: \(error)")
+            logger.error("Failed to save color interaction: \(error)")
         }
     }
 
@@ -53,7 +56,7 @@ import SwiftData
         do {
             try context.save()
         } catch {
-            print("Failed to save word interaction: \(error)")
+            logger.error("Failed to save word interaction: \(error)")
         }
     }
 }
