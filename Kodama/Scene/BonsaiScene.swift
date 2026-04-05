@@ -135,70 +135,46 @@ final class BonsaiScene {
         scene.rootNode.addChildNode(ambientNode)
     }
 
-    // swiftlint:disable function_body_length cyclomatic_complexity
     private func setupPot() {
+        // 半球ボウル: 底は小さな footprint、側面が外側に膨らんで上端リムへ
+        // y=3 の inner が土を受けるリム直下の開口半径
+        let layers: [(outer: Float, inner: Float)] = [
+            (outer: 2.8, inner: 0.0), // y=0  底: 半径 2.8 のソリッド円盤
+            (outer: 5.0, inner: 3.4), // y=1  曲率の立ち上がり
+            (outer: 6.3, inner: 4.8), // y=2  側面ふくらみ
+            (outer: 6.9, inner: 5.6), // y=3  土を受けるリム直下層
+            (outer: 7.2, inner: 6.0) // y=4  リム（上端）
+        ]
+
+        let pot = buildPotNode(layers: layers)
+        pot.name = "pot"
+        rotationNode.addChildNode(pot)
+
+        let soilLayerIndex = layers.count - 2
+        let soilY = Float(soilLayerIndex) * VoxelConstants.renderScale
+        let soil = buildSoilNode(y: soilY, innerRadius: layers[soilLayerIndex].inner)
+        soil.name = "soil"
+        rotationNode.addChildNode(soil)
+
+        treeAnchor.position = SCNVector3(0, soilY + VoxelConstants.renderScale, 0)
+        treeAnchor.name = "treeAnchor"
+        rotationNode.addChildNode(treeAnchor)
+    }
+
+    private func buildPotNode(layers: [(outer: Float, inner: Float)]) -> SCNNode {
         let bs = VoxelConstants.renderScale
-        let cs = CGFloat(VoxelConstants.renderScale)
-        let potParent = SCNNode()
 
         // 5色木目パレット
-        let woodShadowMat = SCNMaterial()
-        woodShadowMat.diffuse.contents = UIColor(hex: "#6B3F20")
-        woodShadowMat.roughness.contents = 0.85
+        let woodShadowGeom = voxelGeom("#6B3F20", roughness: 0.85)
+        let woodDarkGeom = voxelGeom("#8C5830", roughness: 0.85)
+        let woodBaseGeom = voxelGeom("#A07040", roughness: 0.85)
+        let woodWarmGeom = voxelGeom("#B07548", roughness: 0.85)
+        let woodLightGeom = voxelGeom("#C69060", roughness: 0.85)
 
-        let woodDarkMat = SCNMaterial()
-        woodDarkMat.diffuse.contents = UIColor(hex: "#8C5830")
-        woodDarkMat.roughness.contents = 0.85
+        let maxGridRange = Int(ceil(layers.map(\.outer).max() ?? 0))
+        let potParent = SCNNode()
 
-        let woodBaseMat = SCNMaterial()
-        woodBaseMat.diffuse.contents = UIColor(hex: "#A07040")
-        woodBaseMat.roughness.contents = 0.85
-
-        let woodWarmMat = SCNMaterial()
-        woodWarmMat.diffuse.contents = UIColor(hex: "#B07548")
-        woodWarmMat.roughness.contents = 0.85
-
-        let woodLightMat = SCNMaterial()
-        woodLightMat.diffuse.contents = UIColor(hex: "#C69060")
-        woodLightMat.roughness.contents = 0.85
-
-        let woodShadowGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        woodShadowGeom.materials = [woodShadowMat]
-
-        let woodDarkGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        woodDarkGeom.materials = [woodDarkMat]
-
-        let woodBaseGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        woodBaseGeom.materials = [woodBaseMat]
-
-        let woodWarmGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        woodWarmGeom.materials = [woodWarmMat]
-
-        let woodLightGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        woodLightGeom.materials = [woodLightMat]
-
-        // 決定論的 0..<1 乱数（seed = 座標）— 視覚チューニング値
-        let jitter: (Int, Int, Int) -> Float = { x, y, z in
-            // swiftlint:disable:next identifier_name
-            var h =
-                UInt32(bitPattern: Int32(truncatingIfNeeded: x &* 374_761_393 &+ y &* 668_265_263 &+ z &*
-                        2_246_822_519))
-            h = (h ^ (h >> 13)) &* 1_274_126_177
-            h = h ^ (h >> 16)
-            return Float(h) / Float(UInt32.max)
-        }
-
-        // 半球ボウル: 底は小さな footprint、側面が外側に膨らんで上端リムへ
-        let layers: [(Float, Float)] = [
-            (2.8, 0.0), // y=0  底: 半径 2.8 のソリッド円盤
-            (5.0, 3.4), // y=1  曲率の立ち上がり
-            (6.3, 4.8), // y=2  側面ふくらみ
-            (6.9, 5.6), // y=3  土を受ける層
-            (7.2, 6.0) // y=4  リム（上端）
-        ]
-        let maxGridRange = Int(ceil(layers.map(\.0).max() ?? 0))
-
-        for (yLayer, (outerRadius, innerRadius)) in layers.enumerated() {
+        for (yLayer, layer) in layers.enumerated() {
             let yPos = Float(yLayer) * bs
             let isRim = yLayer == layers.count - 1
             let isBottom = yLayer == 0
@@ -206,16 +182,12 @@ final class BonsaiScene {
             for bx in -maxGridRange ... maxGridRange {
                 for bz in -maxGridRange ... maxGridRange {
                     let dist = sqrt(Float(bx * bx + bz * bz))
-                    let inOuter = dist <= outerRadius
-                    let inInner = dist <= innerRadius
-                    guard inOuter, isBottom || !inInner else { continue }
+                    guard dist <= layer.outer, isBottom || dist > layer.inner else { continue }
 
-                    let j = jitter(bx, yLayer, bz)
+                    let j = potVoxelJitter(x: bx, y: yLayer, z: bz)
 
-                    // リムの欠け: 最上層外周の一部をスキップ
-                    if isRim, dist > outerRadius - 1.0, j > 0.9 { continue }
-                    // 側面シルエットの微小凹凸: リム以外の外周一部をスキップ
-                    if !isRim, dist > outerRadius - 1.0, j > 0.95 { continue }
+                    // リム欠け・側面凹凸: 外周一部をスキップ（リムは確率高め）
+                    if dist > layer.outer - 1.0, j > (isRim ? 0.9 : 0.95) { continue }
 
                     let node = SCNNode()
                     if isRim {
@@ -227,12 +199,8 @@ final class BonsaiScene {
                             node.geometry = woodLightGeom
                         }
                     } else if isBottom {
-                        if j < 0.30 {
-                            node.geometry = woodDarkGeom
-                        } else {
-                            node.geometry = woodShadowGeom
-                        }
-                    } else if dist > outerRadius - 1.0 {
+                        node.geometry = j < 0.30 ? woodDarkGeom : woodShadowGeom
+                    } else if dist > layer.outer - 1.0 {
                         // 側面外周
                         if j < 0.20 {
                             node.geometry = woodShadowGeom
@@ -258,56 +226,27 @@ final class BonsaiScene {
                 }
             }
         }
+        return potParent.flattenedClone()
+    }
 
-        let pot = potParent.flattenedClone()
-        pot.name = "pot"
-        rotationNode.addChildNode(pot)
+    private func buildSoilNode(y: Float, innerRadius: Float) -> SCNNode {
+        let bs = VoxelConstants.renderScale
 
-        // 土（ソイル）: リムの1層下
-        let soilY = Float(layers.count - 2) * bs // = 3 * 0.25 = 0.75
-        let soilInnerRadius = layers[layers.count - 2].1 // = 5.6
-        let soilGridRange = Int(ceil(soilInnerRadius))
-
-        let soilDeepMat = SCNMaterial()
-        soilDeepMat.diffuse.contents = UIColor(
-            red: 35 / 255, green: 25 / 255, blue: 18 / 255, alpha: 1
-        )
-        soilDeepMat.roughness.contents = 0.9
-
-        let soilBaseMat = SCNMaterial()
-        soilBaseMat.diffuse.contents = UIColor(
-            red: 50 / 255, green: 38 / 255, blue: 27 / 255, alpha: 1
-        )
-        soilBaseMat.roughness.contents = 0.9
-
-        let soilWarmMat = SCNMaterial()
-        soilWarmMat.diffuse.contents = UIColor(
-            red: 65 / 255, green: 48 / 255, blue: 32 / 255, alpha: 1
-        )
-        soilWarmMat.roughness.contents = 0.9
-
-        let soilDeepGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        soilDeepGeom.materials = [soilDeepMat]
-
-        let soilBaseGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        soilBaseGeom.materials = [soilBaseMat]
-
-        let soilWarmGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        soilWarmGeom.materials = [soilWarmMat]
+        // 3色ソイルパレット
+        let soilDeepGeom = voxelGeom("#231912", roughness: 0.9)
+        let soilBaseGeom = voxelGeom("#32261B", roughness: 0.9)
+        let soilWarmGeom = voxelGeom("#413020", roughness: 0.9)
 
         let soilParent = SCNNode()
-        for bx in -soilGridRange ... soilGridRange {
-            for bz in -soilGridRange ... soilGridRange {
+        let gridRange = Int(ceil(innerRadius))
+        for bx in -gridRange ... gridRange {
+            for bz in -gridRange ... gridRange {
                 let dist = sqrt(Float(bx * bx + bz * bz))
-                guard dist <= soilInnerRadius else { continue }
+                guard dist <= innerRadius else { continue }
 
-                let j = jitter(bx, 0, bz)
+                let j = potVoxelJitter(x: bx, y: 0, z: bz)
                 // 外周凹凸: 一部voxelを1段下げる
-                let actualY: Float = if dist > soilInnerRadius - 1.2, j > 0.7 {
-                    Float(layers.count - 3) * bs
-                } else {
-                    soilY
-                }
+                let actualY = dist > innerRadius - 1.2 && j > 0.7 ? y - bs : y
 
                 let soilNode = SCNNode()
                 if j < 0.15 {
@@ -321,16 +260,24 @@ final class BonsaiScene {
                 soilParent.addChildNode(soilNode)
             }
         }
-        let soil = soilParent.flattenedClone()
-        soil.name = "soil"
-        rotationNode.addChildNode(soil)
-
-        treeAnchor.position = SCNVector3(0, soilY + bs, 0)
-        treeAnchor.name = "treeAnchor"
-        rotationNode.addChildNode(treeAnchor)
+        return soilParent.flattenedClone()
     }
 
-    // swiftlint:enable function_body_length cyclomatic_complexity
+    /// カラーと roughness を受け取り、共有可能な voxel ジオメトリを返す。
+    /// 同色の voxel は同じインスタンスを使いまわすこと（呼び出し元で保持）。
+    private func voxelGeom(_ hex: String, roughness: CGFloat) -> SCNGeometry {
+        let mat = SCNMaterial()
+        mat.diffuse.contents = UIColor(hex: hex)
+        mat.roughness.contents = roughness
+        let geom = SCNBox(
+            width: VoxelConstants.cgBlockSize,
+            height: VoxelConstants.cgBlockSize,
+            length: VoxelConstants.cgBlockSize,
+            chamferRadius: 0
+        )
+        geom.materials = [mat]
+        return geom
+    }
 
     private func setupRotation() {
         rotationNode.name = "rotationRoot"
@@ -347,4 +294,15 @@ final class BonsaiScene {
     var defaultCameraPosition: SCNVector3 {
         SCNVector3(0, 4.6, 12.5)
     }
+}
+
+// MARK: - File-private helpers
+
+/// 座標から決定論的な 0..<1 の値を返す。木目・凹凸のランダム配置に使用。
+/// 視覚ロック済み — 式を変えると木目配置が変わるため変更しないこと。
+private func potVoxelJitter(x: Int, y: Int, z: Int) -> Float {
+    var hash = UInt32(bitPattern: Int32(truncatingIfNeeded: x &* 374_761_393 &+ y &* 668_265_263 &+ z &* 2_246_822_519))
+    hash = (hash ^ (hash >> 13)) &* 1_274_126_177
+    hash = hash ^ (hash >> 16)
+    return Float(hash) / Float(UInt32.max)
 }
