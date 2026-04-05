@@ -5,19 +5,10 @@
 
 import Foundation
 
-// MARK: - GrowthResult
+// MARK: - InteractionPayload
 
-nonisolated struct GrowthResult {
-    let newBlocks: [VoxelBlockData]
-    let removedBlockIDs: [UUID]
-    let seasonalEffects: SeasonalResult
-}
-
-nonisolated struct GrowthTreeState {
-    let seed: Int
-    let totalBlocks: Int
-}
-
+/// Pure value snapshot of an Interaction that can cross actor boundaries
+/// into the nonisolated vector growth engine.
 nonisolated struct InteractionPayload {
     let timestamp: Date
     let type: InteractionType

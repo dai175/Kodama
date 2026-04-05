@@ -7,6 +7,8 @@ import Foundation
 
 // MARK: - VoxelBlockData
 
+/// Flat, thread-safe block record used by the voxel cache. Produced by the
+/// `VoxelRasterizer` and consumed by `BonsaiRenderer`.
 nonisolated struct VoxelBlockData {
     let id: UUID
     let pos: Int3
@@ -29,56 +31,10 @@ nonisolated struct VoxelBlockData {
     }
 }
 
-// MARK: - Stage Profiles
-
-extension TreeBuilder {
-    nonisolated static func stageProfile(for stage: GrowthStage) -> StageProfile {
-        switch stage {
-        case .sapling:
-            StageProfile(
-                branchCountRange: 2 ... 2,
-                branchLengthRange: 5 ... 6,
-                branchStartHeightBias: 0,
-                intermediateFoliageDensity: .barelyThere,
-                terminalFoliageDensity: .sparse,
-                crownDensity: .sparse,
-                prefersOuterCanopy: false,
-                secondaryBranchChance: 0,
-                canopyOpenSlots: 0,
-                canopyLiftChance: 0
-            )
-        case .young:
-            StageProfile(
-                branchCountRange: 2 ... 3,
-                branchLengthRange: 5 ... 7,
-                branchStartHeightBias: 1,
-                intermediateFoliageDensity: .sparse,
-                terminalFoliageDensity: .medium,
-                crownDensity: .medium,
-                prefersOuterCanopy: false,
-                secondaryBranchChance: 3,
-                canopyOpenSlots: 0,
-                canopyLiftChance: 7
-            )
-        case .mature:
-            StageProfile(
-                branchCountRange: 3 ... 3,
-                branchLengthRange: 6 ... 8,
-                branchStartHeightBias: 1,
-                intermediateFoliageDensity: .medium,
-                terminalFoliageDensity: .lush,
-                crownDensity: .medium,
-                prefersOuterCanopy: true,
-                secondaryBranchChance: 2,
-                canopyOpenSlots: 1,
-                canopyLiftChance: 5
-            )
-        }
-    }
-}
-
 // MARK: - SeededRandom
 
+/// Deterministic xorshift generator shared by the vector growth engine and
+/// the rasterizer so output is reproducible for a given seed.
 nonisolated struct SeededRandom: RandomNumberGenerator {
     // MARK: Internal
 
