@@ -135,43 +135,66 @@ final class BonsaiScene {
         scene.rootNode.addChildNode(ambientNode)
     }
 
-    // swiftlint:disable:next function_body_length
+    // swiftlint:disable function_body_length cyclomatic_complexity
     private func setupPot() {
         let bs = VoxelConstants.renderScale
         let cs = CGFloat(VoxelConstants.renderScale)
         let potParent = SCNNode()
 
-        // Materials
-        let darkMaterial = SCNMaterial()
-        darkMaterial.diffuse.contents = UIColor(hex: "#8C5830")
-        darkMaterial.roughness.contents = 0.8
+        // 5色木目パレット
+        let woodShadowMat = SCNMaterial()
+        woodShadowMat.diffuse.contents = UIColor(hex: "#6B3F20")
+        woodShadowMat.roughness.contents = 0.85
 
-        let baseMaterial = SCNMaterial()
-        baseMaterial.diffuse.contents = UIColor(hex: "#A07040")
-        baseMaterial.roughness.contents = 0.8
+        let woodDarkMat = SCNMaterial()
+        woodDarkMat.diffuse.contents = UIColor(hex: "#8C5830")
+        woodDarkMat.roughness.contents = 0.85
 
-        let rimMaterial = SCNMaterial()
-        rimMaterial.diffuse.contents = UIColor(hex: "#B48250")
-        rimMaterial.roughness.contents = 0.8
+        let woodBaseMat = SCNMaterial()
+        woodBaseMat.diffuse.contents = UIColor(hex: "#A07040")
+        woodBaseMat.roughness.contents = 0.85
 
-        let darkGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        darkGeom.materials = [darkMaterial]
+        let woodWarmMat = SCNMaterial()
+        woodWarmMat.diffuse.contents = UIColor(hex: "#B07548")
+        woodWarmMat.roughness.contents = 0.85
 
-        let baseGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        baseGeom.materials = [baseMaterial]
+        let woodLightMat = SCNMaterial()
+        woodLightMat.diffuse.contents = UIColor(hex: "#C69060")
+        woodLightMat.roughness.contents = 0.85
 
-        let rimGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        rimGeom.materials = [rimMaterial]
+        let woodShadowGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        woodShadowGeom.materials = [woodShadowMat]
 
-        // Layer definitions: (outerRadius, innerRadius)
+        let woodDarkGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        woodDarkGeom.materials = [woodDarkMat]
+
+        let woodBaseGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        woodBaseGeom.materials = [woodBaseMat]
+
+        let woodWarmGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        woodWarmGeom.materials = [woodWarmMat]
+
+        let woodLightGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        woodLightGeom.materials = [woodLightMat]
+
+        // 決定論的 0..<1 乱数（seed = 座標）— 視覚チューニング値
+        let jitter: (Int, Int, Int) -> Float = { x, y, z in
+            // swiftlint:disable:next identifier_name
+            var h =
+                UInt32(bitPattern: Int32(truncatingIfNeeded: x &* 374_761_393 &+ y &* 668_265_263 &+ z &*
+                        2_246_822_519))
+            h = (h ^ (h >> 13)) &* 1_274_126_177
+            h = h ^ (h >> 16)
+            return Float(h) / Float(UInt32.max)
+        }
+
+        // 半球ボウル: 底は小さな footprint、側面が外側に膨らんで上端リムへ
         let layers: [(Float, Float)] = [
-            (2.0, 0.0),
-            (2.6, 1.0),
-            (3.2, 1.8),
-            (3.8, 2.6),
-            (4.4, 3.2),
-            (4.9, 3.8),
-            (5.3, 4.3)
+            (2.8, 0.0), // y=0  底: 半径 2.8 のソリッド円盤
+            (5.0, 3.4), // y=1  曲率の立ち上がり
+            (6.3, 4.8), // y=2  側面ふくらみ
+            (6.9, 5.6), // y=3  土を受ける層
+            (7.2, 6.0) // y=4  リム（上端）
         ]
         let maxGridRange = Int(ceil(layers.map(\.0).max() ?? 0))
 
@@ -185,15 +208,50 @@ final class BonsaiScene {
                     let dist = sqrt(Float(bx * bx + bz * bz))
                     let inOuter = dist <= outerRadius
                     let inInner = dist <= innerRadius
-                    guard inOuter && (isBottom || !inInner) else { continue }
+                    guard inOuter, isBottom || !inInner else { continue }
+
+                    let j = jitter(bx, yLayer, bz)
+
+                    // リムの欠け: 最上層外周の一部をスキップ
+                    if isRim, dist > outerRadius - 1.0, j > 0.9 { continue }
+                    // 側面シルエットの微小凹凸: リム以外の外周一部をスキップ
+                    if !isRim, dist > outerRadius - 1.0, j > 0.95 { continue }
 
                     let node = SCNNode()
                     if isRim {
-                        node.geometry = rimGeom
-                    } else if isBottom || dist > outerRadius - 1.0 {
-                        node.geometry = darkGeom
+                        if j < 0.10 {
+                            node.geometry = woodDarkGeom
+                        } else if j < 0.35 {
+                            node.geometry = woodWarmGeom
+                        } else {
+                            node.geometry = woodLightGeom
+                        }
+                    } else if isBottom {
+                        if j < 0.30 {
+                            node.geometry = woodDarkGeom
+                        } else {
+                            node.geometry = woodShadowGeom
+                        }
+                    } else if dist > outerRadius - 1.0 {
+                        // 側面外周
+                        if j < 0.20 {
+                            node.geometry = woodShadowGeom
+                        } else if j < 0.35 {
+                            node.geometry = woodBaseGeom
+                        } else {
+                            node.geometry = woodDarkGeom
+                        }
                     } else {
-                        node.geometry = baseGeom
+                        // 側面本体
+                        if j < 0.05 {
+                            node.geometry = woodShadowGeom
+                        } else if j < 0.15 {
+                            node.geometry = woodDarkGeom
+                        } else if j < 0.30 {
+                            node.geometry = woodWarmGeom
+                        } else {
+                            node.geometry = woodBaseGeom
+                        }
                     }
                     node.position = SCNVector3(Float(bx) * bs, yPos, Float(bz) * bs)
                     potParent.addChildNode(node)
@@ -205,23 +263,61 @@ final class BonsaiScene {
         pot.name = "pot"
         rotationNode.addChildNode(pot)
 
-        let soilMaterial = SCNMaterial()
-        soilMaterial.diffuse.contents = UIColor(red: 45 / 255, green: 35 / 255, blue: 25 / 255, alpha: 1)
-        soilMaterial.roughness.contents = 0.9
-        let soilGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
-        soilGeom.materials = [soilMaterial]
+        // 土（ソイル）: リムの1層下
+        let soilY = Float(layers.count - 2) * bs // = 3 * 0.25 = 0.75
+        let soilInnerRadius = layers[layers.count - 2].1 // = 5.6
+        let soilGridRange = Int(ceil(soilInnerRadius))
+
+        let soilDeepMat = SCNMaterial()
+        soilDeepMat.diffuse.contents = UIColor(
+            red: 35 / 255, green: 25 / 255, blue: 18 / 255, alpha: 1
+        )
+        soilDeepMat.roughness.contents = 0.9
+
+        let soilBaseMat = SCNMaterial()
+        soilBaseMat.diffuse.contents = UIColor(
+            red: 50 / 255, green: 38 / 255, blue: 27 / 255, alpha: 1
+        )
+        soilBaseMat.roughness.contents = 0.9
+
+        let soilWarmMat = SCNMaterial()
+        soilWarmMat.diffuse.contents = UIColor(
+            red: 65 / 255, green: 48 / 255, blue: 32 / 255, alpha: 1
+        )
+        soilWarmMat.roughness.contents = 0.9
+
+        let soilDeepGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        soilDeepGeom.materials = [soilDeepMat]
+
+        let soilBaseGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        soilBaseGeom.materials = [soilBaseMat]
+
+        let soilWarmGeom = SCNBox(width: cs, height: cs, length: cs, chamferRadius: 0)
+        soilWarmGeom.materials = [soilWarmMat]
 
         let soilParent = SCNNode()
-        let rimLayer = layers[layers.count - 1]
-        let rimY = Float(layers.count - 1) * bs
-        let soilRadius = rimLayer.1
-        let soilGridRange = Int(ceil(soilRadius))
         for bx in -soilGridRange ... soilGridRange {
             for bz in -soilGridRange ... soilGridRange {
                 let dist = sqrt(Float(bx * bx + bz * bz))
-                guard dist <= soilRadius else { continue }
-                let soilNode = SCNNode(geometry: soilGeom)
-                soilNode.position = SCNVector3(Float(bx) * bs, rimY, Float(bz) * bs)
+                guard dist <= soilInnerRadius else { continue }
+
+                let j = jitter(bx, 0, bz)
+                // 外周凹凸: 一部voxelを1段下げる
+                let actualY: Float = if dist > soilInnerRadius - 1.2, j > 0.7 {
+                    Float(layers.count - 3) * bs
+                } else {
+                    soilY
+                }
+
+                let soilNode = SCNNode()
+                if j < 0.15 {
+                    soilNode.geometry = soilDeepGeom
+                } else if j < 0.35 {
+                    soilNode.geometry = soilWarmGeom
+                } else {
+                    soilNode.geometry = soilBaseGeom
+                }
+                soilNode.position = SCNVector3(Float(bx) * bs, actualY, Float(bz) * bs)
                 soilParent.addChildNode(soilNode)
             }
         }
@@ -229,10 +325,12 @@ final class BonsaiScene {
         soil.name = "soil"
         rotationNode.addChildNode(soil)
 
-        treeAnchor.position = SCNVector3(0, Float(layers.count) * bs, 0)
+        treeAnchor.position = SCNVector3(0, soilY + bs, 0)
         treeAnchor.name = "treeAnchor"
         rotationNode.addChildNode(treeAnchor)
     }
+
+    // swiftlint:enable function_body_length cyclomatic_complexity
 
     private func setupRotation() {
         rotationNode.name = "rotationRoot"
