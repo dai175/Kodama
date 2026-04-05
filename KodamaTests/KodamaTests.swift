@@ -62,7 +62,7 @@ struct KodamaTests {
         var positions = Set<Int3>()
 
         for block in all {
-            let pos = GridMapper.int3(from: block)
+            let pos = block.pos
             #expect(!positions.contains(pos), "duplicate position \(pos) for \(block.blockType)")
             positions.insert(pos)
         }

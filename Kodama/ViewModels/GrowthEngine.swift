@@ -16,6 +16,7 @@ nonisolated enum GrowthEngine {
         var nextNodeID: Int
         var removedBlockIDs: [UUID] = []
         let initialNodeCount: Int
+        var liveBlockCount: Int
     }
 
     private static let growthAttemptsPerTick = 8
@@ -184,14 +185,15 @@ nonisolated enum GrowthEngine {
             woodOccupied: Set(existingNodes.filter { $0.layer == .wood }.map(\.pos)),
             foliageOccupied: Set(existingNodes.filter { $0.layer == .foliage }.map(\.pos)),
             nextNodeID: existingNodes.count,
-            initialNodeCount: existingNodes.count
+            initialNodeCount: existingNodes.count,
+            liveBlockCount: existingNodes.count
         )
         guard elapsedHours > 0 else { return state }
 
         var rng = SeededRandom(seed: UInt64(input.tree.seed) &+ UInt64(max(0, input.tree.totalBlocks)))
 
         for tick in 0 ..< elapsedHours {
-            guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
+            guard state.liveBlockCount < VoxelConstants.maxBlocks else { break }
             let tickDate = input.lastEval.addingTimeInterval(Double(tick) * 3600)
             let season = Season.current(from: tickDate)
             let growthCount = blocksPerTick(
@@ -199,7 +201,7 @@ nonisolated enum GrowthEngine {
             )
             guard growthCount > 0 else { continue }
             for _ in 0 ..< growthCount {
-                guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
+                guard state.liveBlockCount < VoxelConstants.maxBlocks else { break }
                 attemptGrowthUnit(
                     state: &state,
                     rng: &rng,
@@ -342,7 +344,8 @@ nonisolated enum GrowthEngine {
             guard let node = newNode, node.pos.y >= 0 else { continue }
             if node.layer == .wood {
                 guard !state.woodOccupied.contains(node.pos) else { continue }
-                if state.foliageOccupied.contains(node.pos),
+                let isEviction = state.foliageOccupied.contains(node.pos)
+                if isEviction,
                    let idx = state.allNodes.firstIndex(where: { $0.pos == node.pos && $0.layer == .foliage }) {
                     let evicted = state.allNodes[idx]
                     if evicted.nodeID < state.initialNodeCount {
@@ -354,10 +357,12 @@ nonisolated enum GrowthEngine {
                     state.foliageOccupied.remove(node.pos)
                 }
                 state.woodOccupied.insert(node.pos)
+                if !isEviction { state.liveBlockCount += 1 }
             } else {
                 guard !state.foliageOccupied.contains(node.pos),
                       !state.woodOccupied.contains(node.pos) else { continue }
                 state.foliageOccupied.insert(node.pos)
+                state.liveBlockCount += 1
             }
             state.allNodes.append(node)
             state.newNodes.append(node)
@@ -373,7 +378,7 @@ nonisolated enum GrowthEngine {
     ) {
         let cluster = growFoliageCluster(state: state, season: season, rng: &rng) ?? []
         for raw in cluster {
-            guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
+            guard state.liveBlockCount < VoxelConstants.maxBlocks else { break }
             guard !state.foliageOccupied.contains(raw.pos),
                   !state.woodOccupied.contains(raw.pos),
                   raw.pos.y >= 0 else { continue }
@@ -383,6 +388,7 @@ nonisolated enum GrowthEngine {
             state.allNodes.append(node)
             state.newNodes.append(node)
             state.nextNodeID += 1
+            state.liveBlockCount += 1
         }
     }
 }
