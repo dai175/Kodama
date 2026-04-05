@@ -154,7 +154,16 @@ import SwiftData
     ) throws {
         let treeBlocksByID = Dictionary(uniqueKeysWithValues: tree.blocks.map { ($0.id, $0) })
         let seasonal = growthResult.seasonalEffects
-        persistBlocks(growthResult.newBlocks, tree: tree, context: context)
+        let replacedIDSet = Set(growthResult.removedBlockIDs)
+
+        // Delete foliage blocks that were replaced by branches (branch-over-foliage evictions)
+        for blockID in replacedIDSet {
+            if let block = treeBlocksByID[blockID] {
+                context.delete(block)
+            }
+        }
+
+        persistBlocks(growthResult.newBlocks, tree: tree, context: context, skipBlockIDs: replacedIDSet)
         applySeasonalColorChanges(seasonal.colorChanges, treeBlocksByID: treeBlocksByID)
         let removedIndices = removeSeasonalBlocks(seasonal, treeBlocksByID: treeBlocksByID, context: context)
 
@@ -163,11 +172,16 @@ import SwiftData
             tree: tree,
             added: growthResult.newBlocks,
             seasonal: seasonal,
-            removedCount: removedIndices.count,
+            removedCount: removedIndices.count + replacedIDSet.count,
             currentDate: currentDate
         )
         try context.save()
-        updateInMemoryBlocks(newBlocks: growthResult.newBlocks, seasonal: seasonal, removedIndices: removedIndices)
+        updateInMemoryBlocks(
+            newBlocks: growthResult.newBlocks,
+            seasonal: seasonal,
+            removedIndices: removedIndices,
+            removedBlockIDs: growthResult.removedBlockIDs
+        )
         renderer.renderTree(from: blocks)
         animateNewNodes(
             renderer: renderer,
@@ -175,17 +189,20 @@ import SwiftData
         )
     }
 
-    private func persistBlocks(_ blocks: [VoxelBlockData], tree: BonsaiTree, context: ModelContext) {
-        let existing = tree.blocks
-        var existingByLayer: [StorageKey: VoxelBlock] = [:]
-        for block in existing {
-            let key = StorageKey(position: block.pos, layer: GridMapper.layer(for: block.blockType))
-            existingByLayer[key] = block
+    private func persistBlocks(
+        _ blocks: [VoxelBlockData],
+        tree: BonsaiTree,
+        context: ModelContext,
+        skipBlockIDs: Set<UUID> = []
+    ) {
+        var existingByPos: [StorageKey: VoxelBlock] = [:]
+        for block in tree.blocks where !skipBlockIDs.contains(block.id) {
+            existingByPos[StorageKey(position: block.pos)] = block
         }
 
         for blockData in blocks {
-            let key = StorageKey(position: blockData.pos, layer: GridMapper.layer(for: blockData.blockType))
-            if let existingBlock = existingByLayer[key] {
+            let key = StorageKey(position: blockData.pos)
+            if let existingBlock = existingByPos[key] {
                 existingBlock.blockType = blockData.blockType
                 existingBlock.colorHex = blockData.colorHex
                 existingBlock.parentBlockID = blockData.parentID
@@ -201,7 +218,7 @@ import SwiftData
                 )
                 voxelBlock.tree = tree
                 context.insert(voxelBlock)
-                existingByLayer[key] = voxelBlock
+                existingByPos[key] = voxelBlock
             }
         }
     }
@@ -273,7 +290,8 @@ import SwiftData
     private func updateInMemoryBlocks(
         newBlocks: [VoxelBlockData],
         seasonal: SeasonalResult,
-        removedIndices: Set<Int>
+        removedIndices: Set<Int>,
+        removedBlockIDs: [UUID] = []
     ) {
         // Apply color changes first — indices reference the pre-removal array
         for change in seasonal.colorChanges {
@@ -291,6 +309,11 @@ import SwiftData
             blocks = blocks.enumerated().compactMap { index, block in
                 removedIndices.contains(index) ? nil : block
             }
+        }
+        // Remove foliage blocks evicted by branch-over-foliage conflicts
+        if !removedBlockIDs.isEmpty {
+            let evictedSet = Set(removedBlockIDs)
+            blocks = blocks.filter { !evictedSet.contains($0.id) }
         }
         blocks += newBlocks + seasonal.newSnowBlocks + seasonal.newMossBlocks
     }

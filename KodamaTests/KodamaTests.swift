@@ -37,7 +37,7 @@ struct KodamaTests {
         #expect(initial.count + newBlocks.count <= VoxelConstants.maxBlocks)
     }
 
-    @Test func growthHasNoDuplicateCellsPerLayer() {
+    @Test func growthHasNoDuplicatePositions() {
         let tree = BonsaiTree(seed: 77)
         let initial = TreeBuilder.buildSapling(seed: 77)
         tree.totalBlocks = initial.count
@@ -45,7 +45,7 @@ struct KodamaTests {
         let start = makeDate(year: 2026, month: 4, day: 1)
         let end = makeDate(year: 2026, month: 5, day: 1)
 
-        let newBlocks = GrowthEngine.calculateGrowth(
+        let result = GrowthEngine.calculateGrowthWithSeasons(
             tree: tree,
             existingBlocks: initial,
             since: start,
@@ -53,16 +53,77 @@ struct KodamaTests {
             maxElapsedHours: 24 * 30
         )
 
-        let all = initial + newBlocks
-        var keys = Set<LayerPositionKey>()
+        // Exclude foliage blocks evicted by branch-over-foliage replacement
+        let evictedIDs = Set(result.removedBlockIDs)
+        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
+        var positions = Set<Int3>()
 
         for block in all {
-            let key = LayerPositionKey(
-                layer: GridMapper.layer(for: block.blockType),
-                pos: GridMapper.int3(from: block)
+            let pos = GridMapper.int3(from: block)
+            #expect(!positions.contains(pos), "duplicate position \(pos) for \(block.blockType)")
+            positions.insert(pos)
+        }
+    }
+
+    @Test func noFoliageOverlapsBranchAfterFullGrowth() {
+        let tree = BonsaiTree(seed: 42)
+        let initial = TreeBuilder.buildSapling(seed: 42)
+        tree.totalBlocks = initial.count
+
+        let start = makeDate(year: 2026, month: 1, day: 1)
+        let end = makeDate(year: 2027, month: 1, day: 1)
+
+        let result = GrowthEngine.calculateGrowthWithSeasons(
+            tree: tree,
+            existingBlocks: initial,
+            since: start,
+            currentDate: end,
+            maxElapsedHours: 24 * 365
+        )
+
+        // Exclude foliage blocks evicted by branch-over-foliage replacement
+        let evictedIDs = Set(result.removedBlockIDs)
+        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
+        var woodPositions = Set<Int3>()
+        for block in all where GridMapper.layer(for: block.blockType) == .wood {
+            woodPositions.insert(block.pos)
+        }
+        for block in all where GridMapper.layer(for: block.blockType) == .foliage {
+            #expect(
+                !woodPositions.contains(block.pos),
+                "foliage \(block.blockType) at \(block.pos) overlaps branch/trunk"
             )
-            #expect(!keys.contains(key))
-            keys.insert(key)
+        }
+    }
+
+    @Test func newLeafDoesNotOverlapExistingBranch() {
+        let tree = BonsaiTree(seed: 123)
+        let initial = TreeBuilder.buildSapling(seed: 123)
+        tree.totalBlocks = initial.count
+
+        let start = makeDate(year: 2026, month: 3, day: 1)
+        let end = makeDate(year: 2026, month: 9, day: 1)
+
+        let newBlocks = GrowthEngine.calculateGrowth(
+            tree: tree,
+            existingBlocks: initial,
+            since: start,
+            currentDate: end,
+            maxElapsedHours: 24 * 180
+        )
+
+        // Build the full picture: existing + newly grown
+        let all = initial + newBlocks
+        var woodPositions = Set<Int3>()
+        for block in all where GridMapper.layer(for: block.blockType) == .wood {
+            woodPositions.insert(block.pos)
+        }
+        let newFoliage = newBlocks.filter { GridMapper.layer(for: $0.blockType) == .foliage }
+        for block in newFoliage {
+            #expect(
+                !woodPositions.contains(block.pos),
+                "new leaf/foliage placed on top of existing branch at \(block.pos)"
+            )
         }
     }
 
@@ -146,10 +207,6 @@ struct KodamaTests {
     }
 }
 
-private struct LayerPositionKey: Hashable {
-    let layer: GridLayer
-    let pos: Int3
-}
 
 private func makeDate(year: Int, month: Int, day: Int) -> Date {
     var components = DateComponents()
