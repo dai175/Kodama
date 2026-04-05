@@ -9,7 +9,7 @@ import Foundation
 
 /// Immutable snapshot of a `BranchSegment` for use in `nonisolated` contexts
 /// (the rasterizer and growth engine run off the main actor).
-nonisolated struct SegmentSnapshot: Sendable {
+nonisolated struct SegmentSnapshot {
     let id: UUID
     let kind: BranchKind
     let start: Float3
@@ -28,7 +28,7 @@ nonisolated struct SegmentSnapshot: Sendable {
 }
 
 /// Immutable snapshot of a `LeafCluster`.
-nonisolated struct LeafClusterSnapshot: Sendable {
+nonisolated struct LeafClusterSnapshot {
     let id: UUID
     let segmentID: UUID?
     let center: Float3
@@ -134,7 +134,7 @@ nonisolated enum VoxelRasterizer {
 
         var rng = SeededRandom(seed: UInt64(bitPattern: cluster.scatterSeed))
         let density = max(0, min(cluster.density, 1))
-        let threshold = UInt64(density * 10_000)
+        let threshold = UInt64(density * 10000)
 
         for x in minX ... maxX {
             for y in minY ... maxY {
@@ -147,7 +147,7 @@ nonisolated enum VoxelRasterizer {
 
                     // Consume rng for every candidate cell to keep placement
                     // stable regardless of which cells are excluded.
-                    let roll = rng.next() % 10_000
+                    let roll = rng.next() % 10000
 
                     // Skip cells already occupied by wood.
                     if occupied[pos] != nil { continue }

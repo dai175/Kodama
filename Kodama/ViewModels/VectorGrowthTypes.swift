@@ -7,7 +7,7 @@ import Foundation
 
 // MARK: - VectorGrowthInput
 
-nonisolated struct VectorGrowthInput: Sendable {
+nonisolated struct VectorGrowthInput {
     let seed: Int
     let segments: [SegmentSnapshot]
     let leafClusters: [LeafClusterSnapshot]
@@ -19,7 +19,7 @@ nonisolated struct VectorGrowthInput: Sendable {
 
 // MARK: - VectorGrowthResult
 
-nonisolated struct VectorGrowthResult: Sendable {
+nonisolated struct VectorGrowthResult {
     var newSegments: [SegmentSnapshot]
     var segmentThicknessUpdates: [UUID: Float]
     var segmentDescendantCountUpdates: [UUID: Int]
@@ -39,7 +39,7 @@ nonisolated struct VectorGrowthResult: Sendable {
 
 // MARK: - ClusterUpdate
 
-nonisolated struct ClusterUpdate: Sendable {
+nonisolated struct ClusterUpdate {
     let radius: Float
     let density: Float
     let colorHex: String

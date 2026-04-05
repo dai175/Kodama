@@ -8,7 +8,7 @@ import SwiftData
 
 // MARK: - BranchKind
 
-nonisolated enum BranchKind: String, Codable, Sendable {
+nonisolated enum BranchKind: String, Codable {
     case trunk
     case branch
 }
@@ -43,8 +43,8 @@ final class BranchSegment {
 
     var colorHex: String
 
-    // Self-referential parent/children — children are declared on the parent
-    // via an inverse relationship below.
+    /// Self-referential parent/children — children are declared on the parent
+    /// via an inverse relationship below.
     var parent: BranchSegment?
 
     @Relationship(deleteRule: .nullify, inverse: \BranchSegment.parent)

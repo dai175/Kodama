@@ -8,7 +8,7 @@ import Foundation
 /// Sub-voxel precision 3D vector used by the vector-tree model.
 /// Coordinates are expressed in logical voxel units; the rasterizer snaps
 /// them to the integer grid when producing `VoxelBlockData`.
-nonisolated struct Float3: Hashable, Sendable {
+nonisolated struct Float3: Hashable {
     var x: Float
     var y: Float
     var z: Float
