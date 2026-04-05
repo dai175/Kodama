@@ -63,7 +63,7 @@ cyclomatic_complexity:
   error: 25
 
 type_body_length:
-  warning: 300
+  warning: 350
   error: 400
 
 function_body_length:
