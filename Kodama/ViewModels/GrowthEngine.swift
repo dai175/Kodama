@@ -121,7 +121,7 @@ nonisolated enum GrowthEngine {
         currentDate: Date = Date(),
         pendingInteractions: [Interaction] = [],
         maxElapsedHours: Int = 168
-    ) -> [VoxelBlockData] {
+    ) -> GrowthResult {
         let interactionPayloads = pendingInteractions.map {
             InteractionPayload(
                 timestamp: $0.timestamp,
@@ -159,14 +159,19 @@ nonisolated enum GrowthEngine {
         currentDate: Date = Date(),
         pendingInteractions: [InteractionPayload] = [],
         maxElapsedHours: Int = 168
-    ) -> [VoxelBlockData] {
+    ) -> GrowthResult {
         let input = GrowthInput(
             tree: tree, existingBlocks: existingBlocks, lastEval: lastEval,
             currentDate: currentDate, pendingInteractions: pendingInteractions,
             maxElapsedHours: maxElapsedHours
         )
         let state = runGrowthTicks(input)
-        return toVoxelBlocks(newNodes: state.newNodes, allNodes: state.allNodes)
+        let newBlocks = toVoxelBlocks(newNodes: state.newNodes, allNodes: state.allNodes)
+        return GrowthResult(
+            newBlocks: newBlocks,
+            removedBlockIDs: state.removedBlockIDs,
+            seasonalEffects: .empty
+        )
     }
 
     nonisolated private static func runGrowthTicks(_ input: GrowthInput) -> GrowthState {

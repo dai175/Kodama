@@ -25,7 +25,7 @@ struct KodamaTests {
         let start = makeDate(year: 2026, month: 1, day: 1)
         let end = makeDate(year: 2026, month: 7, day: 1)
 
-        let newBlocks = GrowthEngine.calculateGrowth(
+        let result = GrowthEngine.calculateGrowth(
             tree: tree,
             existingBlocks: initial,
             since: start,
@@ -33,8 +33,8 @@ struct KodamaTests {
             maxElapsedHours: 24 * 180
         )
 
-        #expect(!newBlocks.isEmpty)
-        #expect(initial.count + newBlocks.count <= VoxelConstants.maxBlocks)
+        #expect(!result.newBlocks.isEmpty)
+        #expect(initial.count + result.newBlocks.count <= VoxelConstants.maxBlocks)
     }
 
     @Test func growthHasNoDuplicatePositions() {
@@ -55,7 +55,10 @@ struct KodamaTests {
 
         // Exclude foliage blocks evicted by branch-over-foliage replacement
         let evictedIDs = Set(result.removedBlockIDs)
-        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
+        let all = initial.filter { !evictedIDs.contains($0.id) }
+            + result.newBlocks
+            + result.seasonalEffects.newSnowBlocks
+            + result.seasonalEffects.newMossBlocks
         var positions = Set<Int3>()
 
         for block in all {
@@ -83,7 +86,10 @@ struct KodamaTests {
 
         // Exclude foliage blocks evicted by branch-over-foliage replacement
         let evictedIDs = Set(result.removedBlockIDs)
-        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
+        let all = initial.filter { !evictedIDs.contains($0.id) }
+            + result.newBlocks
+            + result.seasonalEffects.newSnowBlocks
+            + result.seasonalEffects.newMossBlocks
         var woodPositions = Set<Int3>()
         for block in all where GridMapper.layer(for: block.blockType) == .wood {
             woodPositions.insert(block.pos)
@@ -104,7 +110,7 @@ struct KodamaTests {
         let start = makeDate(year: 2026, month: 3, day: 1)
         let end = makeDate(year: 2026, month: 9, day: 1)
 
-        let newBlocks = GrowthEngine.calculateGrowth(
+        let result = GrowthEngine.calculateGrowth(
             tree: tree,
             existingBlocks: initial,
             since: start,
@@ -112,13 +118,14 @@ struct KodamaTests {
             maxElapsedHours: 24 * 180
         )
 
-        // Build the full picture: existing + newly grown
-        let all = initial + newBlocks
+        // Build the full picture: existing (minus evicted) + newly grown
+        let evictedIDs = Set(result.removedBlockIDs)
+        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
         var woodPositions = Set<Int3>()
         for block in all where GridMapper.layer(for: block.blockType) == .wood {
             woodPositions.insert(block.pos)
         }
-        let newFoliage = newBlocks.filter { GridMapper.layer(for: $0.blockType) == .foliage }
+        let newFoliage = result.newBlocks.filter { GridMapper.layer(for: $0.blockType) == .foliage }
         for block in newFoliage {
             #expect(
                 !woodPositions.contains(block.pos),
@@ -135,7 +142,7 @@ struct KodamaTests {
         let start = makeDate(year: 2026, month: 3, day: 1)
         let end = makeDate(year: 2026, month: 8, day: 1)
 
-        let newBlocks = GrowthEngine.calculateGrowth(
+        let result = GrowthEngine.calculateGrowth(
             tree: tree,
             existingBlocks: initial,
             since: start,
@@ -143,7 +150,8 @@ struct KodamaTests {
             maxElapsedHours: 24 * 153
         )
 
-        let all = initial + newBlocks
+        let evictedIDs = Set(result.removedBlockIDs)
+        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
 
         for (index, block) in all.enumerated() {
             guard let parentID = block.parentID else { continue }
@@ -178,7 +186,7 @@ struct KodamaTests {
         let start = makeDate(year: 2026, month: 4, day: 1)
         let end = makeDate(year: 2026, month: 7, day: 1)
 
-        let newBlocks = GrowthEngine.calculateGrowth(
+        let result = GrowthEngine.calculateGrowth(
             tree: tree,
             existingBlocks: initial,
             since: start,
@@ -186,7 +194,8 @@ struct KodamaTests {
             maxElapsedHours: 24 * 91
         )
 
-        let all = initial + newBlocks
+        let evictedIDs = Set(result.removedBlockIDs)
+        let all = initial.filter { !evictedIDs.contains($0.id) } + result.newBlocks
         #expect(all.contains { $0.blockType == .trunk })
         #expect(all.contains { $0.blockType == .branch })
         #expect(all.contains { $0.blockType == .leaf || $0.blockType == .flower })
