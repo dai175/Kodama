@@ -18,6 +18,13 @@ nonisolated struct SegmentSnapshot: Sendable {
     let colorHex: String
     let parentID: UUID?
     let createdAt: Date
+
+    /// Normalized direction vector from `start` to `end`. Mirrors the
+    /// computed accessor on `BranchSegment` so growth-engine code can treat
+    /// snapshots and SwiftData models uniformly.
+    var direction: Float3 {
+        end.subtracting(start).normalized
+    }
 }
 
 /// Immutable snapshot of a `LeafCluster`.
@@ -194,8 +201,8 @@ nonisolated enum VoxelRasterizer {
         let abLenSq = ab.lengthSquared
         guard abLenSq > 1e-6 else { return point.distance(to: start) }
         let dot = ap.x * ab.x + ap.y * ab.y + ap.z * ab.z
-        let t = max(0, min(1, dot / abLenSq))
-        let closest = start.adding(ab.scaled(by: t))
+        let interpolation = max(0, min(1, dot / abLenSq))
+        let closest = start.adding(ab.scaled(by: interpolation))
         return point.distance(to: closest)
     }
 }

@@ -141,6 +141,52 @@ struct VoxelRasterizerTests {
         }
     }
 
+    @Test func outputIsIndependentOfInputOrder() {
+        // Regression guard for the rasterizer's internal segment/cluster
+        // sort: shuffling the input arrays must not change the output.
+        let trunk = trunkSegment()
+        let branch = SegmentSnapshot(
+            id: fixedUUID(3),
+            kind: .branch,
+            start: Float3(x: 0, y: 3, z: 0),
+            end: Float3(x: 2, y: 4, z: 0),
+            thickness: 0.6,
+            colorHex: "#5A4530",
+            parentID: nil,
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+        let clusterA = cluster(center: Float3(x: 1, y: 5, z: 0), seed: 11)
+        let clusterB = LeafClusterSnapshot(
+            id: fixedUUID(2),
+            segmentID: nil,
+            center: Float3(x: -1, y: 5, z: 0),
+            radius: 2,
+            density: 1,
+            colorHex: "#7AB648",
+            scatterSeed: 22
+        )
+
+        let canonical = VoxelRasterizer.rasterize(
+            segments: [trunk, branch],
+            leafClusters: [clusterA, clusterB]
+        )
+        let shuffled = VoxelRasterizer.rasterize(
+            segments: [branch, trunk],
+            leafClusters: [clusterB, clusterA]
+        )
+
+        // Sort by position for comparison — the output array order itself is
+        // also deterministic, but positional equality is the property we
+        // actually care about for rendering.
+        let canonicalPositions = canonical.map(\.pos).sorted {
+            ($0.x, $0.y, $0.z) < ($1.x, $1.y, $1.z)
+        }
+        let shuffledPositions = shuffled.map(\.pos).sorted {
+            ($0.x, $0.y, $0.z) < ($1.x, $1.y, $1.z)
+        }
+        #expect(canonicalPositions == shuffledPositions)
+    }
+
     @Test func noDuplicatePositionsInOutput() {
         let trunk = trunkSegment()
         let leafA = cluster(center: Float3(x: 1, y: 5, z: 0), radius: 2, density: 0.7, seed: 1)
