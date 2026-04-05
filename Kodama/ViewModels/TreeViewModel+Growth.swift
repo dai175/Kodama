@@ -18,35 +18,9 @@ import SwiftData
 
         if let existing = trees.first {
             currentTree = existing
-            blocks = existing.blocks.map { voxelBlockToData($0) }
+            refreshBlockCache(tree: existing, context: context)
         } else {
-            let seed = Int.random(in: 1 ... 999_999)
-            let tree = BonsaiTree(seed: seed)
-            context.insert(tree)
-
-            let saplingBlocks = TreeBuilder.buildSapling(seed: UInt64(seed))
-            for blockData in saplingBlocks {
-                let voxelBlock = VoxelBlock(
-                    id: blockData.id,
-                    pos: blockData.pos,
-                    blockType: blockData.blockType,
-                    colorHex: blockData.colorHex,
-                    source: .autonomous,
-                    parentBlockID: blockData.parentID
-                )
-                voxelBlock.tree = tree
-                context.insert(voxelBlock)
-            }
-
-            tree.totalBlocks = saplingBlocks.count
-            do {
-                try context.save()
-                currentTree = tree
-                blocks = saplingBlocks
-                UserDefaults.standard.set(engineSchemaVersion, forKey: engineSchemaVersionKey)
-            } catch {
-                print("Failed to save new tree: \(error)")
-            }
+            createNewTree(context: context)
         }
     }
 
@@ -84,11 +58,6 @@ import SwiftData
         let pendingInteractions = tree.interactions.filter {
             $0.timestamp > tree.lastGrowthEval && $0.timestamp <= currentDate
         }
-        let treeBlocks = tree.blocks
-        let treeBlocksByID = Dictionary(uniqueKeysWithValues: treeBlocks.map { ($0.id, $0) })
-        let blockDates: [Date?] = blocks.map { block in
-            treeBlocksByID[block.id]?.placedAt
-        }
         let interactionPayloads = pendingInteractions.map {
             InteractionPayload(
                 timestamp: $0.timestamp,
@@ -99,222 +68,257 @@ import SwiftData
                 touchZ: $0.touchZ
             )
         }
-        let treeState = GrowthTreeState(seed: tree.seed, totalBlocks: tree.totalBlocks)
-        let existingBlocks = blocks
-        let lastGrowthEval = tree.lastGrowthEval
 
-        let growthResult = await Task.detached(priority: .userInitiated) {
-            GrowthEngine.calculateGrowthWithSeasons(
-                tree: treeState,
-                existingBlocks: existingBlocks,
-                since: lastGrowthEval,
-                currentDate: currentDate,
-                pendingInteractions: interactionPayloads,
-                blockDates: blockDates,
-                maxElapsedHours: maxElapsedHours
-            )
+        let segmentSnapshots = tree.segments.map { segmentSnapshot(from: $0) }
+        let clusterSnapshots = tree.leafClusters.map { clusterSnapshot(from: $0) }
+        var segmentAges: [UUID: Date] = [:]
+        for segment in tree.segments {
+            segmentAges[segment.id] = segment.createdAt
+        }
+
+        let input = VectorGrowthInput(
+            seed: tree.seed,
+            segments: segmentSnapshots,
+            leafClusters: clusterSnapshots,
+            segmentAges: segmentAges,
+            lastEval: tree.lastGrowthEval,
+            currentDate: currentDate,
+            interactions: interactionPayloads,
+            maxElapsedHours: maxElapsedHours
+        )
+
+        let result = await Task.detached(priority: .userInitiated) {
+            VectorGrowthEngine.calculate(input)
         }.value
 
-        let seasonal = growthResult.seasonalEffects
-        guard hasSeasonalChanges(newBlocks: growthResult.newBlocks, seasonal: seasonal)
-            || !growthResult.removedBlockIDs.isEmpty else {
+        guard hasChanges(result) else {
             tree.lastGrowthEval = currentDate
             try? context.save()
             return
         }
 
         do {
-            try applyGrowthResult(
-                growthResult,
+            try applyVectorGrowthResult(
+                result,
                 tree: tree,
                 currentDate: currentDate,
                 context: context,
                 renderer: renderer
             )
         } catch {
-            print("Failed to save growth changes: \(error)")
+            print("Failed to save vector growth changes: \(error)")
         }
     }
 
-    // MARK: Private
+    // MARK: - Snapshot Conversion
 
-    nonisolated private func hasSeasonalChanges(newBlocks: [VoxelBlockData], seasonal: SeasonalResult) -> Bool {
-        !newBlocks.isEmpty
-            || !seasonal.colorChanges.isEmpty
-            || !seasonal.fallenLeaves.isEmpty
-            || !seasonal.newSnowBlocks.isEmpty
-            || !seasonal.removedSnow.isEmpty
-            || !seasonal.newMossBlocks.isEmpty
-            || !seasonal.expiredFlowers.isEmpty
+    func segmentSnapshot(from segment: BranchSegment) -> SegmentSnapshot {
+        SegmentSnapshot(
+            id: segment.id,
+            kind: segment.kind,
+            start: segment.start,
+            end: segment.end,
+            thickness: segment.thickness,
+            colorHex: segment.colorHex,
+            parentID: segment.parent?.id
+        )
     }
 
-    private func applyGrowthResult(
-        _ growthResult: GrowthResult,
+    func clusterSnapshot(from cluster: LeafCluster) -> LeafClusterSnapshot {
+        LeafClusterSnapshot(
+            id: cluster.id,
+            segmentID: cluster.segment?.id,
+            center: cluster.center,
+            radius: cluster.radius,
+            density: cluster.density,
+            colorHex: cluster.colorHex,
+            scatterSeed: cluster.scatterSeed
+        )
+    }
+
+    // MARK: - Private
+
+    private func hasChanges(_ result: VectorGrowthResult) -> Bool {
+        !result.newSegments.isEmpty
+            || !result.segmentThicknessUpdates.isEmpty
+            || !result.newClusters.isEmpty
+            || !result.clusterUpdates.isEmpty
+            || !result.removedClusterIDs.isEmpty
+    }
+
+    private func applyVectorGrowthResult(
+        _ result: VectorGrowthResult,
         tree: BonsaiTree,
         currentDate: Date,
         context: ModelContext,
         renderer: BonsaiRenderer
     ) throws {
-        let treeBlocksByID = Dictionary(uniqueKeysWithValues: tree.blocks.map { ($0.id, $0) })
-        let seasonal = growthResult.seasonalEffects
-        let replacedIDSet = Set(growthResult.removedBlockIDs)
+        let segmentsByID = Dictionary(uniqueKeysWithValues: tree.segments.map { ($0.id, $0) })
+        var mutableSegmentsByID = segmentsByID
 
-        for blockID in replacedIDSet {
-            if let block = treeBlocksByID[blockID] {
-                context.delete(block)
-            }
-        }
-
-        persistBlocks(growthResult.newBlocks, tree: tree, context: context, skipBlockIDs: replacedIDSet)
-        applySeasonalColorChanges(seasonal.colorChanges, treeBlocksByID: treeBlocksByID)
-        let removedIndices = removeSeasonalBlocks(seasonal, treeBlocksByID: treeBlocksByID, context: context)
-
-        persistBlocks(seasonal.newSnowBlocks + seasonal.newMossBlocks, tree: tree, context: context)
-        let seasonalRemovedIDs = Set(removedIndices.compactMap { $0 < blocks.count ? blocks[$0].id : nil })
-        updateTreeState(
-            tree: tree,
-            added: growthResult.newBlocks,
-            seasonal: seasonal,
-            removedCount: seasonalRemovedIDs.union(replacedIDSet).count,
-            currentDate: currentDate
-        )
-        try context.save()
-        updateInMemoryBlocks(
-            newBlocks: growthResult.newBlocks,
-            seasonal: seasonal,
-            removedIndices: removedIndices,
-            removedBlockIDs: growthResult.removedBlockIDs
-        )
-        renderer.renderTree(from: blocks)
-        animateNewNodes(
-            renderer: renderer,
-            count: growthResult.newBlocks.count + seasonal.newSnowBlocks.count + seasonal.newMossBlocks.count
-        )
-    }
-
-    private func persistBlocks(
-        _ blocks: [VoxelBlockData],
-        tree: BonsaiTree,
-        context: ModelContext,
-        skipBlockIDs: Set<UUID> = []
-    ) {
-        var existingByPos: [StorageKey: VoxelBlock] = [:]
-        for block in tree.blocks where !skipBlockIDs.contains(block.id) {
-            existingByPos[StorageKey(position: block.pos)] = block
-        }
-
-        for blockData in blocks {
-            let key = StorageKey(position: blockData.pos)
-            if let existingBlock = existingByPos[key] {
-                existingBlock.blockType = blockData.blockType
-                existingBlock.colorHex = blockData.colorHex
-                existingBlock.parentBlockID = blockData.parentID
-                existingBlock.placedAt = Date()
-            } else {
-                let voxelBlock = VoxelBlock(
-                    id: blockData.id,
-                    pos: blockData.pos,
-                    blockType: blockData.blockType,
-                    colorHex: blockData.colorHex,
-                    source: .autonomous,
-                    parentBlockID: blockData.parentID
-                )
-                voxelBlock.tree = tree
-                context.insert(voxelBlock)
-                existingByPos[key] = voxelBlock
-            }
-        }
-    }
-
-    private func applySeasonalColorChanges(
-        _ changes: [(blockIndex: Int, newColor: String)],
-        treeBlocksByID: [UUID: VoxelBlock]
-    ) {
-        // DB entities only — in-memory update happens in updateInMemoryBlocks after save
-        for change in changes {
-            guard change.blockIndex < blocks.count else { continue }
-            let old = blocks[change.blockIndex]
-            if let treeBlock = treeBlocksByID[old.id] {
-                treeBlock.colorHex = change.newColor
-            }
-        }
-    }
-
-    private func removeSeasonalBlocks(
-        _ seasonal: SeasonalResult,
-        treeBlocksByID: [UUID: VoxelBlock],
-        context: ModelContext
-    ) -> Set<Int> {
-        var deletedIndices = Set<Int>()
-
-        let fallenIndices = seasonal.fallenLeaves
-        for index in fallenIndices {
-            if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
-                context.delete(treeBlock)
-                deletedIndices.insert(index)
-            }
-        }
-
-        let expiredFlowerIndices = seasonal.expiredFlowers
-        for index in expiredFlowerIndices where !deletedIndices.contains(index) {
-            if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
-                context.delete(treeBlock)
-                deletedIndices.insert(index)
-            }
-        }
-
-        let removedSnowIndices = seasonal.removedSnow
-        for index in removedSnowIndices where !deletedIndices.contains(index) {
-            if let treeBlock = findTreeBlock(at: index, treeBlocksByID: treeBlocksByID) {
-                context.delete(treeBlock)
-            }
-        }
-
-        return fallenIndices.union(expiredFlowerIndices).union(removedSnowIndices)
-    }
-
-    private func findTreeBlock(at index: Int, treeBlocksByID: [UUID: VoxelBlock]) -> VoxelBlock? {
-        guard index < blocks.count else { return nil }
-        return treeBlocksByID[blocks[index].id]
-    }
-
-    private func updateTreeState(
-        tree: BonsaiTree,
-        added: [VoxelBlockData],
-        seasonal: SeasonalResult,
-        removedCount: Int,
-        currentDate: Date
-    ) {
-        let addedCount = added.count + seasonal.newSnowBlocks.count + seasonal.newMossBlocks.count
-        tree.totalBlocks += addedCount - removedCount
-        tree.lastGrowthEval = currentDate
-    }
-
-    private func updateInMemoryBlocks(
-        newBlocks: [VoxelBlockData],
-        seasonal: SeasonalResult,
-        removedIndices: Set<Int>,
-        removedBlockIDs: [UUID]
-    ) {
-        // Apply color changes first — indices reference the pre-removal array
-        for change in seasonal.colorChanges {
-            guard change.blockIndex < blocks.count else { continue }
-            let old = blocks[change.blockIndex]
-            blocks[change.blockIndex] = VoxelBlockData(
-                id: old.id,
-                pos: old.pos,
-                blockType: old.blockType,
-                colorHex: change.newColor,
-                parentID: old.parentID
+        // Insert new segments.
+        for snapshot in result.newSegments {
+            let parent = snapshot.parentID.flatMap { mutableSegmentsByID[$0] }
+            let segment = BranchSegment(
+                id: snapshot.id,
+                kind: snapshot.kind,
+                start: snapshot.start,
+                end: snapshot.end,
+                thickness: snapshot.thickness,
+                colorHex: snapshot.colorHex,
+                createdAt: currentDate,
+                parent: parent
             )
+            segment.tree = tree
+            context.insert(segment)
+            mutableSegmentsByID[snapshot.id] = segment
         }
-        if !removedIndices.isEmpty || !removedBlockIDs.isEmpty {
-            let evictedSet = Set(removedBlockIDs)
-            blocks = blocks.enumerated().compactMap { index, block in
-                (removedIndices.contains(index) || evictedSet.contains(block.id)) ? nil : block
+
+        // Apply thickness updates.
+        for (segmentID, thickness) in result.segmentThicknessUpdates {
+            mutableSegmentsByID[segmentID]?.thickness = thickness
+        }
+        for (segmentID, count) in result.segmentDescendantCountUpdates {
+            mutableSegmentsByID[segmentID]?.descendantCount = count
+        }
+
+        // Apply cluster updates.
+        let clustersByID = Dictionary(uniqueKeysWithValues: tree.leafClusters.map { ($0.id, $0) })
+        var mutableClustersByID = clustersByID
+        for (clusterID, update) in result.clusterUpdates {
+            guard let cluster = mutableClustersByID[clusterID] else { continue }
+            cluster.radius = update.radius
+            cluster.density = update.density
+            cluster.colorHex = update.colorHex
+        }
+
+        // Remove clusters.
+        for clusterID in result.removedClusterIDs {
+            if let cluster = mutableClustersByID.removeValue(forKey: clusterID) {
+                context.delete(cluster)
             }
         }
-        blocks += newBlocks + seasonal.newSnowBlocks + seasonal.newMossBlocks
+
+        // Insert new clusters.
+        for snapshot in result.newClusters {
+            let segment = snapshot.segmentID.flatMap { mutableSegmentsByID[$0] }
+            let cluster = LeafCluster(
+                id: snapshot.id,
+                center: snapshot.center,
+                radius: snapshot.radius,
+                density: snapshot.density,
+                colorHex: snapshot.colorHex,
+                scatterSeed: snapshot.scatterSeed,
+                createdAt: currentDate,
+                segment: segment
+            )
+            cluster.tree = tree
+            context.insert(cluster)
+            mutableClustersByID[snapshot.id] = cluster
+        }
+
+        tree.lastGrowthEval = currentDate
+
+        try context.save()
+
+        // Regenerate voxel cache from the updated vector skeleton.
+        regenerateVoxelCache(tree: tree, context: context)
+        try context.save()
+
+        tree.totalBlocks = blocks.count
+        renderer.renderTree(from: blocks)
+    }
+
+    // MARK: - New Tree Creation
+
+    private func createNewTree(context: ModelContext) {
+        let seed = Int.random(in: 1 ... 999_999)
+        let tree = BonsaiTree(seed: seed)
+        context.insert(tree)
+
+        let sapling = SkeletonBuilder.buildSapling(seed: UInt64(seed))
+        var segmentsByID: [UUID: BranchSegment] = [:]
+        for snapshot in sapling.segments {
+            let parent = snapshot.parentID.flatMap { segmentsByID[$0] }
+            let segment = BranchSegment(
+                id: snapshot.id,
+                kind: snapshot.kind,
+                start: snapshot.start,
+                end: snapshot.end,
+                thickness: snapshot.thickness,
+                colorHex: snapshot.colorHex,
+                parent: parent
+            )
+            segment.tree = tree
+            context.insert(segment)
+            segmentsByID[snapshot.id] = segment
+        }
+        for snapshot in sapling.leafClusters {
+            let segment = snapshot.segmentID.flatMap { segmentsByID[$0] }
+            let cluster = LeafCluster(
+                id: snapshot.id,
+                center: snapshot.center,
+                radius: snapshot.radius,
+                density: snapshot.density,
+                colorHex: snapshot.colorHex,
+                scatterSeed: snapshot.scatterSeed,
+                segment: segment
+            )
+            cluster.tree = tree
+            context.insert(cluster)
+        }
+
+        do {
+            try context.save()
+            currentTree = tree
+            regenerateVoxelCache(tree: tree, context: context)
+            tree.totalBlocks = blocks.count
+            try context.save()
+            UserDefaults.standard.set(engineSchemaVersion, forKey: engineSchemaVersionKey)
+        } catch {
+            print("Failed to save new tree: \(error)")
+        }
+    }
+
+    // MARK: - Voxel Cache
+
+    private func refreshBlockCache(tree: BonsaiTree, context: ModelContext) {
+        if tree.blocks.isEmpty {
+            regenerateVoxelCache(tree: tree, context: context)
+            try? context.save()
+        } else {
+            blocks = tree.blocks.map { voxelBlockToData($0) }
+        }
+    }
+
+    private func regenerateVoxelCache(tree: BonsaiTree, context: ModelContext) {
+        let segmentSnapshots = tree.segments.map { segmentSnapshot(from: $0) }
+        let clusterSnapshots = tree.leafClusters.map { clusterSnapshot(from: $0) }
+        let newBlocks = VoxelRasterizer.rasterize(
+            segments: segmentSnapshots,
+            leafClusters: clusterSnapshots
+        )
+
+        // Delete existing cached VoxelBlock entities.
+        for block in tree.blocks {
+            context.delete(block)
+        }
+
+        // Insert fresh cache.
+        for blockData in newBlocks {
+            let voxelBlock = VoxelBlock(
+                id: blockData.id,
+                pos: blockData.pos,
+                blockType: blockData.blockType,
+                colorHex: blockData.colorHex,
+                source: .autonomous,
+                parentBlockID: nil
+            )
+            voxelBlock.tree = tree
+            context.insert(voxelBlock)
+        }
+
+        blocks = newBlocks
     }
 
     private func ensureEngineCompatibility(context: ModelContext) {
@@ -335,17 +339,5 @@ import SwiftData
         } catch {
             print("Failed to reset incompatible engine data: \(error)")
         }
-    }
-
-    private func animateNewNodes(renderer: BonsaiRenderer, count: Int) {
-        guard count > 0 else { return }
-        let treeRoot = renderer.bonsaiScene.treeAnchor.childNodes.first { $0.name == "treeRoot" }
-        guard let root = treeRoot else { return }
-
-        let allChildren = root.childNodes.flatMap { node -> [SCNNode] in
-            node.name == "treeDynamic" ? Array(node.childNodes) : [node]
-        }
-        let newNodes = Array(allChildren.suffix(count))
-        GrowthAnimator.animateNewBlocks(nodes: newNodes)
     }
 }
