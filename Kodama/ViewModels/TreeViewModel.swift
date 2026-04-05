@@ -20,7 +20,7 @@ final class TreeViewModel {
 
     var blocks: [VoxelBlockData] = []
     var currentTree: BonsaiTree?
-    let engineSchemaVersion = 5
+    let engineSchemaVersion = 6
     let engineSchemaVersionKey = "kodama.engineSchemaVersion"
 
     var isFirstLaunch: Bool {
