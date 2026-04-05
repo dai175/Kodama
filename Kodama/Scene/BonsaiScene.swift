@@ -152,7 +152,11 @@ final class BonsaiScene {
 
         let soilLayerIndex = layers.count - 2
         let soilY = Float(soilLayerIndex) * VoxelConstants.renderScale
-        let soil = buildSoilNode(y: soilY, innerRadius: layers[soilLayerIndex].inner)
+        let soil = buildSoilNode(
+            y: soilY,
+            innerRadius: layers[soilLayerIndex].inner,
+            lowerInnerRadius: layers[soilLayerIndex - 1].inner
+        )
         soil.name = "soil"
         rotationNode.addChildNode(soil)
 
@@ -229,7 +233,7 @@ final class BonsaiScene {
         return potParent.flattenedClone()
     }
 
-    private func buildSoilNode(y: Float, innerRadius: Float) -> SCNNode {
+    private func buildSoilNode(y: Float, innerRadius: Float, lowerInnerRadius: Float) -> SCNNode {
         let bs = VoxelConstants.renderScale
 
         // 3色ソイルパレット
@@ -245,8 +249,10 @@ final class BonsaiScene {
                 guard dist <= innerRadius else { continue }
 
                 let j = potVoxelJitter(x: bx, y: 0, z: bz)
-                // 外周凹凸: 一部voxelを1段下げる
-                let actualY = dist > innerRadius - 1.2 && j > 0.7 ? y - bs : y
+                // 外周凹凸: 一部voxelを1段下げる（下げた先の内半径を超える場合はスキップ）
+                let lowered = dist > innerRadius - 1.2 && j > 0.7
+                guard !lowered || dist <= lowerInnerRadius else { continue }
+                let actualY = lowered ? y - bs : y
 
                 let soilNode = SCNNode()
                 if j < 0.15 {
@@ -267,6 +273,7 @@ final class BonsaiScene {
     /// 同色の voxel は同じインスタンスを使いまわすこと（呼び出し元で保持）。
     private func voxelGeom(_ hex: String, roughness: CGFloat) -> SCNGeometry {
         let mat = SCNMaterial()
+        mat.lightingModel = .physicallyBased
         mat.diffuse.contents = UIColor(hex: hex)
         mat.roughness.contents = roughness
         let geom = SCNBox(
