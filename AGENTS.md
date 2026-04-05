@@ -48,6 +48,7 @@ xcodebuild -scheme Kodama -destination 'platform=iOS Simulator,name=iPhone 17' -
 - Follow the existing SwiftData model relationships and delete rules.
 - Preserve the current MVVM structure. Do not move logic into views unless the surrounding code already does so.
 - Keep SceneKit integration aligned with the existing `UIViewRepresentable` bridge approach.
+- Logging: use `Logger` (OSLog) instead of `print` for error/diagnostic output.
 
 ## Project-Specific Notes
 

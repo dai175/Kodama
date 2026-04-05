@@ -50,6 +50,7 @@ swiftformat .
 - Environment: `.environment(obj)` + `@Environment(Type.self)` pattern
 - SwiftData: `@Model` macro, `@Relationship(deleteRule: .cascade)`
 - Auto-formatted with SwiftFormat (`.swiftformat`) and SwiftLint (`.swiftlint.yml`)
+- Logging: use `Logger` (OSLog) instead of `print` for error/diagnostic output
 
 ## Gotchas
 
