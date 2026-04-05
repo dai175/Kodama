@@ -22,7 +22,7 @@ nonisolated enum SkeletonBuilder {
     static let initialTrunkHeight: Float = 4.0
     static let initialTrunkThickness: Float = 0.6
 
-    static func buildSapling(seed: UInt64) -> Sapling {
+    static func buildSapling(seed: UInt64, createdAt: Date = Date()) -> Sapling {
         var rng = SeededRandom(seed: seed)
 
         let trunkColor = TreeBuilder.trunkColors[Int(rng.next() % UInt64(TreeBuilder.trunkColors.count))]
@@ -35,7 +35,8 @@ nonisolated enum SkeletonBuilder {
             end: Float3(x: 0, y: initialTrunkHeight, z: 0),
             thickness: initialTrunkThickness,
             colorHex: trunkColor,
-            parentID: nil
+            parentID: nil,
+            createdAt: createdAt
         )
 
         let clusterCenter = Float3(x: 0, y: initialTrunkHeight + 0.5, z: 0)

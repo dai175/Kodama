@@ -26,16 +26,11 @@ struct VectorGrowthEngineTests {
         end: Date,
         maxHours: Int = 24 * 30
     ) -> VectorGrowthInput {
-        let sapling = SkeletonBuilder.buildSapling(seed: seed)
-        var ages: [UUID: Date] = [:]
-        for segment in sapling.segments {
-            ages[segment.id] = start
-        }
+        let sapling = SkeletonBuilder.buildSapling(seed: seed, createdAt: start)
         return VectorGrowthInput(
             seed: Int(seed),
             segments: sapling.segments,
             leafClusters: sapling.leafClusters,
-            segmentAges: ages,
             lastEval: start,
             currentDate: end,
             interactions: [],
@@ -78,17 +73,20 @@ struct VectorGrowthEngineTests {
         #expect(total <= VectorGrowthEngine.maxSegments)
     }
 
-    @Test func thicknessIncreasesWithAge() {
+    @Test func thicknessIncreasesWithAge() throws {
         let start = makeDate(year: 2026, month: 1, day: 1)
         let end = makeDate(year: 2026, month: 4, day: 1)
         let input = saplingInput(start: start, end: end)
 
         let result = VectorGrowthEngine.calculate(input)
-        // The initial trunk segment is old; its thickness should grow.
+        // The initial trunk segment is ~90 days old; age alone should push
+        // its thickness above the starting value regardless of descendants.
         let trunkID = input.segments[0].id
-        if let newThickness = result.segmentThicknessUpdates[trunkID] {
-            #expect(newThickness > input.segments[0].thickness)
-        }
+        let newThickness = try #require(
+            result.segmentThicknessUpdates[trunkID],
+            "trunk thickness should be updated after a quarter of aging"
+        )
+        #expect(newThickness > input.segments[0].thickness)
     }
 
     @Test func leafClustersAttachOnlyToTips() {

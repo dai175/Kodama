@@ -8,7 +8,7 @@ import SwiftData
 
 // MARK: - BranchKind
 
-nonisolated enum BranchKind: String, Codable {
+nonisolated enum BranchKind: String, Codable, Sendable {
     case trunk
     case branch
 }

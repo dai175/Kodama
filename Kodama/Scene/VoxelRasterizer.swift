@@ -9,7 +9,7 @@ import Foundation
 
 /// Immutable snapshot of a `BranchSegment` for use in `nonisolated` contexts
 /// (the rasterizer and growth engine run off the main actor).
-nonisolated struct SegmentSnapshot {
+nonisolated struct SegmentSnapshot: Sendable {
     let id: UUID
     let kind: BranchKind
     let start: Float3
@@ -17,10 +17,11 @@ nonisolated struct SegmentSnapshot {
     let thickness: Float
     let colorHex: String
     let parentID: UUID?
+    let createdAt: Date
 }
 
 /// Immutable snapshot of a `LeafCluster`.
-nonisolated struct LeafClusterSnapshot {
+nonisolated struct LeafClusterSnapshot: Sendable {
     let id: UUID
     let segmentID: UUID?
     let center: Float3
@@ -46,7 +47,17 @@ nonisolated enum VoxelRasterizer {
         var occupied: [Int3: BlockType] = [:]
         var result: [VoxelBlockData] = []
 
-        for segment in segments {
+        // Sort segments deterministically so SwiftData fetch order and the
+        // insertion order inside the growth engine cannot change the output.
+        // Trunk segments are processed before branches so the trunk-overrides-
+        // branch rule below behaves consistently.
+        let sortedSegments = segments.sorted { lhs, rhs in
+            if lhs.kind != rhs.kind {
+                return lhs.kind == .trunk
+            }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }
+        for segment in sortedSegments {
             rasterize(segment: segment, occupied: &occupied, into: &result)
         }
 
@@ -82,15 +93,10 @@ nonisolated enum VoxelRasterizer {
                     guard dist <= thick else { continue }
                     let pos = Int3(x: x, y: y, z: z)
                     guard pos.y >= 0 else { continue }
-                    // Trunk overrides existing branch; otherwise first-write wins.
-                    if let existing = occupied[pos] {
-                        if existing == .trunk { continue }
-                        if blockType != .trunk { continue }
-                        // Replace the branch entry with trunk.
-                        if let idx = result.firstIndex(where: { $0.pos == pos }) {
-                            result.remove(at: idx)
-                        }
-                    }
+                    // First-write wins. Because rasterize() sorts trunks ahead
+                    // of branches, any collision between trunk and branch at
+                    // the same cell correctly resolves to trunk.
+                    if occupied[pos] != nil { continue }
                     occupied[pos] = blockType
                     result.append(VoxelBlockData(
                         pos: pos,
