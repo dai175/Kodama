@@ -55,9 +55,9 @@ import SwiftData
         openInteraction.tree = tree
         context.insert(openInteraction)
 
-        let pendingInteractions = tree.interactions.filter {
-            $0.timestamp > tree.lastGrowthEval && $0.timestamp <= currentDate
-        }
+        let pendingInteractions = tree.interactions
+            .filter { $0.timestamp > tree.lastGrowthEval && $0.timestamp <= currentDate }
+            .sorted { $0.timestamp < $1.timestamp }
         let interactionPayloads = pendingInteractions.map {
             InteractionPayload(
                 timestamp: $0.timestamp,
@@ -71,16 +71,11 @@ import SwiftData
 
         let segmentSnapshots = tree.segments.map { segmentSnapshot(from: $0) }
         let clusterSnapshots = tree.leafClusters.map { clusterSnapshot(from: $0) }
-        var segmentAges: [UUID: Date] = [:]
-        for segment in tree.segments {
-            segmentAges[segment.id] = segment.createdAt
-        }
 
         let input = VectorGrowthInput(
             seed: tree.seed,
             segments: segmentSnapshots,
             leafClusters: clusterSnapshots,
-            segmentAges: segmentAges,
             lastEval: tree.lastGrowthEval,
             currentDate: currentDate,
             interactions: interactionPayloads,
@@ -120,7 +115,8 @@ import SwiftData
             end: segment.end,
             thickness: segment.thickness,
             colorHex: segment.colorHex,
-            parentID: segment.parent?.id
+            parentID: segment.parent?.id,
+            createdAt: segment.createdAt
         )
     }
 
@@ -156,7 +152,10 @@ import SwiftData
         let segmentsByID = Dictionary(uniqueKeysWithValues: tree.segments.map { ($0.id, $0) })
         var mutableSegmentsByID = segmentsByID
 
-        // Insert new segments.
+        // Insert new segments. Preserve each snapshot's tick-level createdAt
+        // so multi-day catch-up growth doesn't collapse all timestamps onto
+        // the final evaluation date — thickness aging on subsequent evals
+        // depends on the true per-segment birth time.
         for snapshot in result.newSegments {
             let parent = snapshot.parentID.flatMap { mutableSegmentsByID[$0] }
             let segment = BranchSegment(
@@ -166,7 +165,7 @@ import SwiftData
                 end: snapshot.end,
                 thickness: snapshot.thickness,
                 colorHex: snapshot.colorHex,
-                createdAt: currentDate,
+                createdAt: snapshot.createdAt,
                 parent: parent
             )
             segment.tree = tree
@@ -219,13 +218,13 @@ import SwiftData
 
         tree.lastGrowthEval = currentDate
 
-        try context.save()
-
-        // Regenerate voxel cache from the updated vector skeleton.
+        // Regenerate voxel cache from the updated vector skeleton before
+        // saving so totalBlocks (also persisted below) reflects the new
+        // cache in a single transaction.
         regenerateVoxelCache(tree: tree, context: context)
+        tree.totalBlocks = blocks.count
         try context.save()
 
-        tree.totalBlocks = blocks.count
         renderer.renderTree(from: blocks)
     }
 
@@ -247,6 +246,7 @@ import SwiftData
                 end: snapshot.end,
                 thickness: snapshot.thickness,
                 colorHex: snapshot.colorHex,
+                createdAt: snapshot.createdAt,
                 parent: parent
             )
             segment.tree = tree
@@ -269,7 +269,6 @@ import SwiftData
         }
 
         do {
-            try context.save()
             currentTree = tree
             regenerateVoxelCache(tree: tree, context: context)
             tree.totalBlocks = blocks.count

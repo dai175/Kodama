@@ -39,19 +39,14 @@ struct KodamaTests {
     // MARK: - End-to-End: Skeleton → Growth → Rasterize
 
     @Test func fullPipelineProducesRenderableVoxels() {
-        let sapling = SkeletonBuilder.buildSapling(seed: 123)
         let start = makeDate(year: 2026, month: 5, day: 1)
         let end = makeDate(year: 2026, month: 7, day: 1)
-        var ages: [UUID: Date] = [:]
-        for segment in sapling.segments {
-            ages[segment.id] = start
-        }
+        let sapling = SkeletonBuilder.buildSapling(seed: 123, createdAt: start)
 
         let input = VectorGrowthInput(
             seed: 123,
             segments: sapling.segments,
             leafClusters: sapling.leafClusters,
-            segmentAges: ages,
             lastEval: start,
             currentDate: end,
             interactions: [],
@@ -71,7 +66,8 @@ struct KodamaTests {
                     end: segments[i].end,
                     thickness: newThickness,
                     colorHex: segments[i].colorHex,
-                    parentID: segments[i].parentID
+                    parentID: segments[i].parentID,
+                    createdAt: segments[i].createdAt
                 )
             }
         }
@@ -133,19 +129,14 @@ struct KodamaTests {
     // MARK: - Segment Hierarchy Integrity
 
     @Test func segmentHierarchyIsValidAndAcyclic() {
-        let sapling = SkeletonBuilder.buildSapling(seed: 5)
         let start = makeDate(year: 2026, month: 3, day: 1)
         let end = makeDate(year: 2026, month: 8, day: 1)
-        var ages: [UUID: Date] = [:]
-        for segment in sapling.segments {
-            ages[segment.id] = start
-        }
+        let sapling = SkeletonBuilder.buildSapling(seed: 5, createdAt: start)
 
         let input = VectorGrowthInput(
             seed: 5,
             segments: sapling.segments,
             leafClusters: sapling.leafClusters,
-            segmentAges: ages,
             lastEval: start,
             currentDate: end,
             interactions: [],

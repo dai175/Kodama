@@ -10,6 +10,13 @@ import Testing
 struct VoxelRasterizerTests {
     // MARK: - Helpers
 
+    /// Deterministic UUID builder for tests — avoids force-unwrapping a
+    /// string literal constructor.
+    private func fixedUUID(_ index: Int) -> UUID {
+        let suffix = String(format: "%012d", index)
+        return UUID(uuidString: "00000000-0000-0000-0000-\(suffix)") ?? UUID()
+    }
+
     private func trunkSegment(
         start: Float3 = Float3(x: 0, y: 0, z: 0),
         end: Float3 = Float3(x: 0, y: 4, z: 0),
@@ -22,7 +29,8 @@ struct VoxelRasterizerTests {
             end: end,
             thickness: thickness,
             colorHex: "#4A3520",
-            parentID: nil
+            parentID: nil,
+            createdAt: Date(timeIntervalSince1970: 0)
         )
     }
 
@@ -34,7 +42,7 @@ struct VoxelRasterizerTests {
         color: String = "#7AB648"
     ) -> LeafClusterSnapshot {
         LeafClusterSnapshot(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            id: fixedUUID(1),
             segmentID: nil,
             center: center,
             radius: radius,
@@ -100,7 +108,8 @@ struct VoxelRasterizerTests {
             end: Float3(x: 2, y: 5, z: 0),
             thickness: 0.6,
             colorHex: "#5A4530",
-            parentID: nil
+            parentID: nil,
+            createdAt: Date(timeIntervalSince1970: 0)
         )
         let leafCluster = cluster(center: Float3(x: 0, y: 5, z: 0), radius: 3)
         let blocks = VoxelRasterizer.rasterize(segments: [branch], leafClusters: [leafCluster])
@@ -136,7 +145,7 @@ struct VoxelRasterizerTests {
         let trunk = trunkSegment()
         let leafA = cluster(center: Float3(x: 1, y: 5, z: 0), radius: 2, density: 0.7, seed: 1)
         let leafB = LeafClusterSnapshot(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            id: fixedUUID(2),
             segmentID: nil,
             center: Float3(x: -1, y: 5, z: 0),
             radius: 2,

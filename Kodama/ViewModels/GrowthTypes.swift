@@ -9,7 +9,7 @@ import Foundation
 
 /// Pure value snapshot of an Interaction that can cross actor boundaries
 /// into the nonisolated vector growth engine.
-nonisolated struct InteractionPayload {
+nonisolated struct InteractionPayload: Sendable {
     let timestamp: Date
     let type: InteractionType
     let value: String?

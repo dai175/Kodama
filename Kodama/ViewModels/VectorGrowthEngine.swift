@@ -56,7 +56,7 @@ nonisolated enum VectorGrowthEngine {
             let tickDate = input.lastEval.addingTimeInterval(Double(tick) * 3600)
             let season = Season.current(from: tickDate)
             let stage = stageForSegments(state.segments)
-            let growthCount = GrowthEngine.blocksPerTick(season: season, growthStage: stage, rng: &rng)
+            let growthCount = GrowthEngine.growthActionsPerTick(season: season, growthStage: stage, rng: &rng)
             guard growthCount > 0 else { continue }
 
             for _ in 0 ..< growthCount {
@@ -66,22 +66,20 @@ nonisolated enum VectorGrowthEngine {
                     rng: &rng,
                     touchHint: touchHint,
                     wordHint: wordHint,
-                    currentDate: tickDate
+                    tickDate: tickDate
                 )
             }
         }
 
         updateThicknessAndDescendants(
             state: &state,
-            input: input
+            currentDate: input.currentDate
         )
         updateLeafClusters(
             state: &state,
             rng: &rng,
             season: Season.current(from: input.currentDate),
-            colorHint: colorHint,
-            currentDate: input.currentDate,
-            input: input
+            colorHint: colorHint
         )
 
         return state.result
@@ -94,7 +92,7 @@ nonisolated enum VectorGrowthEngine {
         rng: inout SeededRandom,
         touchHint: Float3?,
         wordHint _: String?,
-        currentDate: Date
+        tickDate: Date
     ) {
         let isBranching = Int(rng.next() % 100) < branchChancePerTick
         let tipIDs = findTipSegmentIDs(in: state.segments)
@@ -130,13 +128,13 @@ nonisolated enum VectorGrowthEngine {
             end: end,
             thickness: newSegmentThickness,
             colorHex: color,
-            parentID: parent.id
+            parentID: parent.id,
+            createdAt: tickDate
         )
 
         state.segments.append(newSegment)
         state.result.newSegments.append(newSegment)
         state.liveSegmentCount += 1
-        _ = currentDate // segmentAges are updated by the caller on persistence
     }
 
     private static func pickDirection(rng: inout SeededRandom, biasTowards hint: Float3) -> Float3 {
@@ -173,7 +171,7 @@ nonisolated enum VectorGrowthEngine {
 
     private static func updateThicknessAndDescendants(
         state: inout VectorGrowthState,
-        input: VectorGrowthInput
+        currentDate: Date
     ) {
         // Build parent → children adjacency to count descendants.
         var children: [UUID: [UUID]] = [:]
@@ -190,8 +188,7 @@ nonisolated enum VectorGrowthEngine {
 
         for segment in state.segments {
             let descendants = descendantCounts[segment.id] ?? 0
-            let createdAt = input.segmentAges[segment.id] ?? input.currentDate
-            let ageDays = max(0, Float(input.currentDate.timeIntervalSince(createdAt) / 86400))
+            let ageDays = max(0, Float(currentDate.timeIntervalSince(segment.createdAt) / 86400))
             let maxThickness = segment.kind == .trunk ? trunkThicknessMax : branchThicknessMax
             let thickness = min(
                 maxThickness,
@@ -222,41 +219,51 @@ nonisolated enum VectorGrowthEngine {
         state: inout VectorGrowthState,
         rng: inout SeededRandom,
         season: Season,
-        colorHint: String?,
-        currentDate: Date,
-        input: VectorGrowthInput
+        colorHint: String?
     ) {
-        let tipIDs = Set(findTipSegmentIDs(in: state.segments))
+        // Iterate tips in sorted order so rng consumption (scatter seeds,
+        // color rolls) is deterministic regardless of insertion order.
+        let tipIDs = findTipSegmentIDs(in: state.segments)
+            .sorted { $0.uuidString < $1.uuidString }
+        let tipIDSet = Set(tipIDs)
         let existingClustersBySegment = Dictionary(
-            grouping: state.leafClusters,
-            by: { $0.segmentID ?? UUID() }
+            grouping: state.leafClusters.compactMap { cluster -> (UUID, LeafClusterSnapshot)? in
+                guard let segID = cluster.segmentID else { return nil }
+                return (segID, cluster)
+            },
+            by: \.0
         )
 
         // Drop clusters whose parent segment is no longer a tip.
         for cluster in state.leafClusters {
-            if let segID = cluster.segmentID, !tipIDs.contains(segID) {
+            if let segID = cluster.segmentID, !tipIDSet.contains(segID) {
                 state.result.removedClusterIDs.append(cluster.id)
             }
         }
 
         // Create / update clusters on tips.
+        let (radius, density) = clusterSize(for: season)
         for tipID in tipIDs {
             guard let tip = state.segments.first(where: { $0.id == tipID }) else { continue }
-            let center = tip.end
             let seasonalColor = SeasonalEngine.leafColor(for: season, rng: &rng, userColor: colorHint)
-            let (radius, density) = clusterSize(for: season)
 
-            if let existing = existingClustersBySegment[tipID]?.first {
-                state.result.clusterUpdates[existing.id] = ClusterUpdate(
-                    radius: radius,
-                    density: density,
-                    colorHex: seasonalColor
-                )
+            if let existing = existingClustersBySegment[tipID]?.first?.1 {
+                // Only emit an update when a visible property actually changes.
+                let radiusChanged = abs(existing.radius - radius) > 0.001
+                let densityChanged = abs(existing.density - density) > 0.001
+                let colorChanged = existing.colorHex != seasonalColor
+                if radiusChanged || densityChanged || colorChanged {
+                    state.result.clusterUpdates[existing.id] = ClusterUpdate(
+                        radius: radius,
+                        density: density,
+                        colorHex: seasonalColor
+                    )
+                }
             } else {
                 let newCluster = LeafClusterSnapshot(
                     id: UUID(),
                     segmentID: tipID,
-                    center: center,
+                    center: tip.end,
                     radius: radius,
                     density: density,
                     colorHex: seasonalColor,
@@ -265,9 +272,6 @@ nonisolated enum VectorGrowthEngine {
                 state.result.newClusters.append(newCluster)
             }
         }
-
-        _ = currentDate
-        _ = input
     }
 
     private static func clusterSize(for season: Season) -> (radius: Float, density: Float) {

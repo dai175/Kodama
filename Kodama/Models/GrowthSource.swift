@@ -5,7 +5,7 @@
 
 // MARK: - GrowthSource
 
-enum GrowthSource: String, Codable {
+enum GrowthSource: String, Codable, Sendable {
     case autonomous
     case touch
     case color
@@ -14,7 +14,7 @@ enum GrowthSource: String, Codable {
 
 // MARK: - InteractionType
 
-enum InteractionType: String, Codable {
+enum InteractionType: String, Codable, Sendable {
     case open
     case touch
     case color

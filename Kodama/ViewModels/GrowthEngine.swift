@@ -15,7 +15,7 @@ nonisolated enum GrowthEngine {
     /// Growth rate varies by season and growth stage, as in the previous
     /// voxel-first engine — the vector engine reuses the same cadence so
     /// seasonal pacing stays consistent.
-    nonisolated static func blocksPerTick(
+    nonisolated static func growthActionsPerTick(
         season: Season,
         growthStage: TreeBuilder.GrowthStage,
         rng: inout SeededRandom
