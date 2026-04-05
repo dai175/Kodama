@@ -343,7 +343,7 @@ nonisolated enum VectorGrowthEngine {
 
 // MARK: - Working State
 
-private struct VectorGrowthState {
+nonisolated private struct VectorGrowthState {
     var segments: [SegmentSnapshot]
     var leafClusters: [LeafClusterSnapshot]
     var result: VectorGrowthResult
