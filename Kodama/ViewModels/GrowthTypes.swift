@@ -9,6 +9,7 @@ import Foundation
 
 nonisolated struct GrowthResult {
     let newBlocks: [VoxelBlockData]
+    let removedBlockIDs: [UUID]
     let seasonalEffects: SeasonalResult
 }
 

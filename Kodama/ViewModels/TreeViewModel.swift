@@ -14,14 +14,13 @@ import SwiftData
 final class TreeViewModel {
     struct StorageKey: Hashable {
         let position: Int3
-        let layer: GridLayer
     }
 
     // MARK: Internal
 
     var blocks: [VoxelBlockData] = []
     var currentTree: BonsaiTree?
-    let engineSchemaVersion = 4
+    let engineSchemaVersion = 5
     let engineSchemaVersionKey = "kodama.engineSchemaVersion"
 
     var isFirstLaunch: Bool {
