@@ -170,16 +170,10 @@ nonisolated enum GrowthEngine {
     }
 
     nonisolated private static func runGrowthTicks(_ input: GrowthInput) -> GrowthState {
-        let lastEval = input.lastEval
-        let currentDate = input.currentDate
-        let tree = input.tree
-        let existingBlocks = input.existingBlocks
-        let pendingInteractions = input.pendingInteractions
-        let maxElapsedHours = input.maxElapsedHours
-        let elapsed = currentDate.timeIntervalSince(lastEval)
-        let elapsedHours = min(Int(elapsed / 3600), maxElapsedHours)
+        let elapsed = input.currentDate.timeIntervalSince(input.lastEval)
+        let elapsedHours = min(Int(elapsed / 3600), input.maxElapsedHours)
 
-        let existingNodes = toGrowthNodes(existingBlocks)
+        let existingNodes = toGrowthNodes(input.existingBlocks)
         var state = GrowthState(
             allNodes: existingNodes,
             woodOccupied: Set(existingNodes.filter { $0.layer == .wood }.map(\.pos)),
@@ -189,11 +183,11 @@ nonisolated enum GrowthEngine {
         )
         guard elapsedHours > 0 else { return state }
 
-        var rng = SeededRandom(seed: UInt64(tree.seed) &+ UInt64(max(0, tree.totalBlocks)))
+        var rng = SeededRandom(seed: UInt64(input.tree.seed) &+ UInt64(max(0, input.tree.totalBlocks)))
 
         for tick in 0 ..< elapsedHours {
             guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
-            let tickDate = lastEval.addingTimeInterval(Double(tick) * 3600)
+            let tickDate = input.lastEval.addingTimeInterval(Double(tick) * 3600)
             let season = Season.current(from: tickDate)
             let growthCount = blocksPerTick(
                 season: season, growthStage: growthStage(for: state.allNodes), rng: &rng
@@ -201,7 +195,12 @@ nonisolated enum GrowthEngine {
             guard growthCount > 0 else { continue }
             for _ in 0 ..< growthCount {
                 guard state.allNodes.count < VoxelConstants.maxBlocks else { break }
-                attemptGrowthUnit(state: &state, rng: &rng, season: season, pendingInteractions: pendingInteractions)
+                attemptGrowthUnit(
+                    state: &state,
+                    rng: &rng,
+                    season: season,
+                    pendingInteractions: input.pendingInteractions
+                )
             }
             if Int(rng.next() % 100) < 18 {
                 attemptBonusFoliage(state: &state, rng: &rng, season: season)
@@ -338,18 +337,15 @@ nonisolated enum GrowthEngine {
             guard let node = newNode, node.pos.y >= 0 else { continue }
             if node.layer == .wood {
                 guard !state.woodOccupied.contains(node.pos) else { continue }
-                // Branch wins: evict any foliage occupying this position
                 if state.foliageOccupied.contains(node.pos),
                    let idx = state.allNodes.firstIndex(where: { $0.pos == node.pos && $0.layer == .foliage }) {
                     let evicted = state.allNodes[idx]
                     if evicted.nodeID < state.initialNodeCount {
-                        // Persisted foliage — schedule DB deletion
                         state.removedBlockIDs.append(evicted.blockID)
                     } else {
-                        // New foliage added this run — undo from newNodes (no DB entry yet)
                         state.newNodes.removeAll { $0.nodeID == evicted.nodeID }
                     }
-                    // Keep in allNodes to preserve index-based nodeID lookups
+                    // allNodes retains the entry to preserve index-based nodeID lookups
                     state.foliageOccupied.remove(node.pos)
                 }
                 state.woodOccupied.insert(node.pos)

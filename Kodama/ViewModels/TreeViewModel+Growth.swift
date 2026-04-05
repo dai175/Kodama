@@ -114,7 +114,8 @@ import SwiftData
         }.value
 
         let seasonal = growthResult.seasonalEffects
-        guard hasSeasonalChanges(newBlocks: growthResult.newBlocks, seasonal: seasonal) else {
+        guard hasSeasonalChanges(newBlocks: growthResult.newBlocks, seasonal: seasonal)
+            || !growthResult.removedBlockIDs.isEmpty else {
             tree.lastGrowthEval = currentDate
             try? context.save()
             return
@@ -156,7 +157,6 @@ import SwiftData
         let seasonal = growthResult.seasonalEffects
         let replacedIDSet = Set(growthResult.removedBlockIDs)
 
-        // Delete foliage blocks that were replaced by branches (branch-over-foliage evictions)
         for blockID in replacedIDSet {
             if let block = treeBlocksByID[blockID] {
                 context.delete(block)
@@ -168,11 +168,12 @@ import SwiftData
         let removedIndices = removeSeasonalBlocks(seasonal, treeBlocksByID: treeBlocksByID, context: context)
 
         persistBlocks(seasonal.newSnowBlocks + seasonal.newMossBlocks, tree: tree, context: context)
+        let seasonalRemovedIDs = Set(removedIndices.compactMap { $0 < blocks.count ? blocks[$0].id : nil })
         updateTreeState(
             tree: tree,
             added: growthResult.newBlocks,
             seasonal: seasonal,
-            removedCount: removedIndices.count + replacedIDSet.count,
+            removedCount: seasonalRemovedIDs.union(replacedIDSet).count,
             currentDate: currentDate
         )
         try context.save()
@@ -291,7 +292,7 @@ import SwiftData
         newBlocks: [VoxelBlockData],
         seasonal: SeasonalResult,
         removedIndices: Set<Int>,
-        removedBlockIDs: [UUID] = []
+        removedBlockIDs: [UUID]
     ) {
         // Apply color changes first — indices reference the pre-removal array
         for change in seasonal.colorChanges {
@@ -305,15 +306,11 @@ import SwiftData
                 parentID: old.parentID
             )
         }
-        if !removedIndices.isEmpty {
-            blocks = blocks.enumerated().compactMap { index, block in
-                removedIndices.contains(index) ? nil : block
-            }
-        }
-        // Remove foliage blocks evicted by branch-over-foliage conflicts
-        if !removedBlockIDs.isEmpty {
+        if !removedIndices.isEmpty || !removedBlockIDs.isEmpty {
             let evictedSet = Set(removedBlockIDs)
-            blocks = blocks.filter { !evictedSet.contains($0.id) }
+            blocks = blocks.enumerated().compactMap { index, block in
+                (removedIndices.contains(index) || evictedSet.contains(block.id)) ? nil : block
+            }
         }
         blocks += newBlocks + seasonal.newSnowBlocks + seasonal.newMossBlocks
     }
